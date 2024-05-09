@@ -146,11 +146,12 @@ def send_message(message):
         dstv6_prefix = ":".join(dstv6_prefix)
         srcv6_prefix = source_address.split(":")[: 4]
         srcv6_prefix = ":".join(srcv6_prefix)
-        block_size = 16
+        block_size = 8
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
-    plain_text = pad_pkcs7(plain_text, block_size)
+    
+    plain_text = pad(plain_text, 8)
     plaintext_blocks = [plain_text[i : i + block_size] for i in range(0, len(plain_text), block_size)]
     encrypted_blocks = cast_encrypt_blocks(key, plaintext_blocks)
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
