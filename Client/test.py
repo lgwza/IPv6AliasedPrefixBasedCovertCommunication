@@ -10,7 +10,7 @@ def decrypt(ciphertext, key):
     return cipher.decrypt(ciphertext)
 
 # 测试
-empty_message = b''
+empty_message = b'3'
 key = b'01234567'  # 8字节的密钥
 
 # 加密

@@ -14,7 +14,6 @@ warnings.filterwarnings("ignore")
 
 status = CLOSED
 
-
 def expand_ipv6_address(address):
     ipv6_obj = ipaddress.IPv6Address(address)
     expanded_address = str(ipv6_obj.exploded)
@@ -40,14 +39,6 @@ def cast_decrypt_block(key, ciphertext_block, block_size = 8):
     except ValueError as e:
         print("Decryption error:", str(e))
         return None
-        
-
-def pad_pkcs7(data, block_size = 8):
-    padding_length = block_size - (len(data) % block_size)
-    if padding_length == block_size:
-        padding_length = 0
-    padding = bytes([padding_length] * padding_length)
-    return data + padding
 
 def handle_packet(packet):
     global source_saddr_spoofable, source_daddr_spoofable, \
@@ -64,6 +55,7 @@ def handle_packet(packet):
         # print(ciphertext)
         # 将密文分组解密
         plain_text = cast_decrypt_block(key, ciphertext)
+        plain_text = unpad(plain_text, 8)
         all_plain_text += plain_text
     if dst_saddr_spoofable:
         # 提取源地址后 64 位
@@ -71,6 +63,7 @@ def handle_packet(packet):
         ciphertext = "".join(ciphertext)
         ciphertext = bytes.fromhex(ciphertext)
         plain_text = cast_decrypt_block(key, ciphertext)
+        plain_text = unpad(plain_text, 8)
         all_plain_text += plain_text
     return all_plain_text
 
@@ -160,7 +153,6 @@ def send_message(message):
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
-    plain_text = b'1234567'
     if len(plain_text) % block_size != 0:
         plain_text = pad(plain_text, block_size)
     if source_daddr_spoofable and source_saddr_spoofable and \

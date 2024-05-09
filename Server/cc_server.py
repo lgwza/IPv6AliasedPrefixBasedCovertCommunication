@@ -1,10 +1,12 @@
 from scapy.all import sniff, IPv6, ICMPv6EchoRequest, send, Raw, UDP, TCP
 from Crypto.Cipher import CAST
+from Crypto.Util.Padding import pad, unpad
 import ipaddress
 import threading
 from Timer import Timer
 from config import *
 import random
+
 
 Timer1 = Timer()
 
@@ -30,18 +32,31 @@ def cast_decrypt_block(key, ciphertext_block, block_size = 8):
         return None
 
 def handle_packet(packet):
+    global source_saddr_spoofable, source_daddr_spoofable, \
+        dst_saddr_spoofable, dst_daddr_spoofable
     # print("Destination IPv6 address: ", packet[IPv6].dst)
-    # 提取目的地址后 64 位: 倒数第四个冒号后的内容
-    ciphertext = expand_ipv6_address(packet[IPv6].dst).split(":")[-4 :]
-    ciphertext = "".join(ciphertext)
-    # print(ciphertext)
-    # 将 16 进制字符串转换为字节串
-    ciphertext = bytes.fromhex(ciphertext)
-    # print(ciphertext)
-    # 将密文分组解密
-    
-    plain_text = cast_decrypt_block(key, ciphertext)
-    return plain_text
+    all_plain_text = b''
+    if dst_daddr_spoofable:
+        # 提取目的地址后 64 位: 倒数第四个冒号后的内容
+        ciphertext = expand_ipv6_address(packet[IPv6].dst).split(":")[-4 :]
+        ciphertext = "".join(ciphertext)
+        # print(ciphertext)
+        # 将 16 进制字符串转换为字节串
+        ciphertext = bytes.fromhex(ciphertext)
+        # print(ciphertext)
+        # 将密文分组解密
+        plain_text = cast_decrypt_block(key, ciphertext)
+        plain_text = unpad(plain_text, 8)
+        all_plain_text += plain_text
+    if dst_saddr_spoofable:
+        # 提取源地址后 64 位
+        ciphertext = expand_ipv6_address(packet[IPv6].src).split(":")[-4 :]
+        ciphertext = "".join(ciphertext)
+        ciphertext = bytes.fromhex(ciphertext)
+        plain_text = cast_decrypt_block(key, ciphertext)
+        plain_text = unpad(plain_text, 8)
+        all_plain_text += plain_text
+    return all_plain_text
 
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
@@ -90,60 +105,100 @@ def receive_message():
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
 
-def pad_pkcs7(data, block_size = 8):
-    padding_length = block_size - (len(data) % block_size)
-    if padding_length == block_size:
-        padding_length = 0
-    padding = bytes([padding_length] * padding_length)
-    return data + padding
+def packet_assemble(dstv6, srcv6, mode):
+    ipv6_layer = IPv6(src = srcv6, dst = dstv6)
+    if mode == 'I':
+        complete_packet = ipv6_layer / ICMPv6EchoRequest()
+    elif mode == 'T':
+        complete_packet = ipv6_layer / \
+        TCP(sport = random.randint(4096, 65535),
+            dport = random.randint(1, 65535),
+            flags = "S")
+    elif mode == 'U':
+        complete_packet = ipv6_layer / \
+        UDP(sport = random.randint(4096, 65535),
+            dport = random.randint(1, 65535)) / \
+        Raw(load = b'Hello, UDP')
+    else:
+        print(f"ERROR! MODE {mode} IS NOT DEFINED!")
+        exit(-1)
+    return complete_packet
 
-def send_packet(encrypted_blocks_hex, dstv6_prefix, block_size = 8):
-    # print(encrypted_blocks_hex)
+def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8):
     # TODO 自动获取源地址
-    global source_address
-    src_addr_prefix = source_address.split(":")[:4]
-    src_addr_prefix = ":".join(src_addr_prefix)
+    global source_address, mode
     # 将密文附着于 IPv6 目的地址后 64 位，依次发送
-    for i in range(len(encrypted_blocks_hex)):
-        dstv6 = dstv6_prefix
-        for j in range(0, len(encrypted_blocks_hex[i]), 4):
-            dstv6 = dstv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
-        ipv6_packet = IPv6(src = source_address, dst = dstv6)
-        if mode == 'I':
-            complete_packet = ipv6_packet / ICMPv6EchoRequest()
-        elif mode == 'T':
-            complete_packet = IPv6(dst = dstv6) / \
-            TCP(sport = random.randint(4096, 65535),
-                dport = random.randint(1, 65535),
-                flags = "S")
-        elif mode == 'U':
-            complete_packet = IPv6(dst = dstv6) / \
-            UDP(sport = random.randint(4096, 65535),
-                dport = random.randint(1, 65535)) / \
-            Raw(load = b'Hello, UDP')
-        else:
-            print(f"ERROR! MODE {mode} IS NOT DEFINED!")
-            exit(-1)            
+    # 一个 block 是 8 字节，每个 block 转换为 16 进制字符串后长度为 16
+    if (dstv6_prefix != None and srcv6_prefix == None) or \
+        (dstv6_prefix == None and srcv6_prefix != None):
+        for i in range(len(encrypted_blocks_hex)):
+            # 添加 ':'
+            dstv6 = dstv6_prefix
+            srcv6 = srcv6_prefix
+            if dstv6_prefix != None and srcv6_prefix == None:
+                for j in range(0, len(encrypted_blocks_hex[i]), 4):
+                    dstv6 = dstv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
+                srcv6 = source_address
+            elif dstv6_prefix == None and srcv6_prefix != None:
+                for j in range(0, len(encrypted_blocks_hex[i]), 4):
+                    srcv6 = srcv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
+                dstv6 = dst_address
+            complete_packet = packet_assemble(dstv6, srcv6, mode)
+            send(complete_packet)
+    elif dstv6_prefix != None and srcv6_prefix != None:
+        for i in range(0, len(encrypted_blocks_hex), 2):
+            dstv6 = dstv6_prefix
+            srcv6 = srcv6_prefix
+            for j in range(0, len(encrypted_blocks_hex[i]), 4):
+                dstv6 = dstv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
+            for j in range(0, len(encrypted_blocks_hex[i + 1]), 4):
+                srcv6 = srcv6 + ":" + encrypted_blocks_hex[i + 1][j : j + 4]
+            complete_packet = packet_assemble(dstv6, srcv6, mode)
+            send(complete_packet)
+    else:
+        print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
+        exit(-1)
 
-        send(complete_packet)
-
-def send_message(dst_addr, message):
+def send_message(message):
     plain_text = message
     if isinstance(message, str):
         plain_text = message.encode()
-    plain_text = pad_pkcs7(plain_text)
-    plaintext_blocks = [plain_text[i : i + 8] for i in range(0, len(plain_text), 8)]
+    dstv6_prefix = None
+    srcv6_prefix = None
+    if source_daddr_spoofable and not source_saddr_spoofable:
+        dstv6_prefix = dst_address.split(":")[: 4]
+        dstv6_prefix = ":".join(dstv6_prefix)
+        block_size = 8
+    elif not source_daddr_spoofable and source_saddr_spoofable:
+        srcv6_prefix = source_address.split(":")[: 4]
+        srcv6_prefix = ":".join(srcv6_prefix)
+        block_size = 8
+    elif source_daddr_spoofable and source_saddr_spoofable:
+        dstv6_prefix = dst_address.split(":")[: 4]
+        dstv6_prefix = ":".join(dstv6_prefix)
+        srcv6_prefix = source_address.split(":")[: 4]
+        srcv6_prefix = ":".join(srcv6_prefix)
+        block_size = 8
+    else:
+        print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
+        exit(-1)
+    if len(plain_text) % block_size != 0:
+        plain_text = pad(plain_text, block_size)
+    if source_daddr_spoofable and source_saddr_spoofable and \
+        len(plain_text) // block_size % 2 != 0:
+        plain_text = pad(plain_text, block_size)
+    plaintext_blocks = [plain_text[i : i + block_size] for i in range(0, len(plain_text), block_size)]
+    print(plaintext_blocks)
     encrypted_blocks = cast_encrypt_blocks(key, plaintext_blocks)
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
-    # 提取 IPv6 地址的前 64 位
-    dstv6_prefix = dst_addr.split(":")[:4]
-    dstv6_prefix = ":".join(dstv6_prefix)
-    send_packet(encrypted_blocks_hex, dstv6_prefix) # change dstv6_prefix to dst_addr
+    print(encrypted_blocks_hex)
+    # print(dstv6_prefix)
+    send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size)
 
-def send_input(dst_addr):
+def send_input():
     while True:
         Input = input("Please input your message: ")
-        send_message(dst_addr, Input)
+        send_message(Input)
 
 
 if __name__ == "__main__":
