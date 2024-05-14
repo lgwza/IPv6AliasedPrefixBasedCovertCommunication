@@ -1,6 +1,28 @@
-source_address = "2401:c080:1000:4662:3eec:efff:feb9:8630"
-source_mac = "3c:ec:ef:b9:86:30"
-source_iface = "enp1s0f0"
+import subprocess
+import json
+
+try:
+    command_dev = "ip -6 route get 2001:4860:4860::8888 | grep -oP '(?<=dev )\S+'"
+    result_dev = subprocess.run(command_dev, shell=True, stdout=subprocess.PIPE)
+    result_dev = result_dev.stdout.decode().strip()
+    print(f'source_dev: {result_dev}')
+
+    command_src = "ip -6 route get 2001:4860:4860::8888 | grep -oP '(?<=src )\S+'"
+    result_src = subprocess.run(command_src, shell=True, stdout=subprocess.PIPE)
+    result_src = result_src.stdout.decode().strip()
+    print(f'source_ip: {result_src}')
+
+    command_mac = "ifconfig " + result_dev + " | grep -oP '(?<=ether )\S+'"
+    result_mac = subprocess.run(command_mac, shell=True, stdout=subprocess.PIPE)
+    result_mac = result_mac.stdout.decode().strip()
+    print(f'source_mac: {result_mac}')
+except:
+    print("ERROR! SOURCE INFO INCOMPLETE!")
+    exit(-1)
+
+source_address = result_src
+source_mac = result_mac
+source_iface = result_dev
 dst_address = "2402:f000:6:1e00::232"
 
 source_saddr_spoofable = False
