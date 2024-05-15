@@ -42,6 +42,7 @@ def get_key():
 
     # 输出前8位
     ret_key = md5_hash(encrypted_time)[:8]
+    print(current_time_bytes)
     print(ret_key)
     return ret_key
 

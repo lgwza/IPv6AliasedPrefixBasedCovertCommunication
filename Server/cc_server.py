@@ -18,8 +18,9 @@ sys.path.insert(0, parent_dir)
 from config import *
 import random
 
-
 Timer1 = Timer()
+
+status = LISTEN
 
 def extract_ipv6_prefix(ipv6_address, prefix_length):
     # 将输入的字符串转换为 IPv6 对象
