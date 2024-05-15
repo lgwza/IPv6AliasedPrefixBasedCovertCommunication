@@ -30,6 +30,14 @@ def md5_hash(bytes_string):
     # 获取md5值
     return md5.digest()
 
+def encrypt_data(data, key):
+    nonce = b'\xbf\xcc\xe4\x81\xfc\xee2^:\xdd\xd4F'
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    encrypted_data = cipher.encrypt(data)
+    encrypt_data = nonce + encrypted_data
+    # md5, 8 bit
+    return md5_hash(encrypt_data)[:8]
+
 def get_key():
     # chacha20 key 必须为32字节
     key = b'}\x0c\xf3ufE\x94\xfaT\xb7\x8d\x81\xb6\x1b~\xe1\x81\x88\xbd\xfc\xf5\xa4\xbf\xb5\x98\x1d\xa2\x93iq#\x0b'

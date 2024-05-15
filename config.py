@@ -1,5 +1,6 @@
 import subprocess
 from key_gen import get_key
+from key_gen import encrypt_data
 
 try:
     command_dev = "ip -6 route get 2001:4860:4860::8888 | grep -oP '(?<=dev )\S+'"
@@ -26,19 +27,22 @@ source_iface = result_dev
 src_dst_ip_set = {"2402:f000:6:1e00::232",
                    "2401:c080:1000:4662:3eec:efff:feb9:8630"}
 dst_address = list(src_dst_ip_set - {source_address})[0]
-print(dst_address)
-source_saddr_spoofable = False # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
-source_daddr_spoofable = True # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
-dst_saddr_spoofable = True # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
-dst_daddr_spoofable = True # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
+# print(dst_address)
+spoofable_info = {"2402:f000:6:1e00::232": [False, True],
+                  "2401:c080:1000:4662:3eec:efff:feb9:8630": [True, True]}
+
+source_saddr_spoofable = spoofable_info[source_address][0] # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
+source_daddr_spoofable = spoofable_info[source_address][1] # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
+dst_saddr_spoofable = spoofable_info[dst_address][0] # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
+dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
 mode = 'I'
 
 key = get_key()
-initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
-SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
-SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'
-ACK_text = b'\x08\x07\x06\x05\x08\x07\x06\x05'
+initial_message = encrypt_data(b'\x00\x01\x02\x03\x04\x05\x06\x07', key * 4)
+SYN_text = encrypt_data(b'\x01\x02\x03\x04\x05\x06\x07\x08', key * 4)
+SYN_ACK_text = encrypt_data(b'\x01\x02\x03\x04\x01\x02\x03\x04', key * 4)
+ACK_text = encrypt_data(b'\x08\x07\x06\x05\x08\x07\x06\x05', key * 4)
 CLOSED = 0
 LISTEN = 1
 SYN_SENT = 2
