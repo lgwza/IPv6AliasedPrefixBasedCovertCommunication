@@ -23,12 +23,12 @@ except:
 source_address = result_src
 source_mac = result_mac
 source_iface = result_dev
-dst_address = "2401:c080:1000:4662:3eec:efff:feb9:8630"
+dst_address = "2402:f000:6:1e00::232"
 
-source_saddr_spoofable = False
-source_daddr_spoofable = True
-dst_saddr_spoofable = True
-dst_daddr_spoofable = True
+source_saddr_spoofable = True # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
+source_daddr_spoofable = True # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
+dst_saddr_spoofable = False # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
+dst_daddr_spoofable = True # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
 mode = 'I'
 
@@ -48,4 +48,3 @@ CLOSE_WAIT = 7
 CLOSING = 8
 LAST_ACK = 9
 TIME_WAIT = 10
-status = LISTEN

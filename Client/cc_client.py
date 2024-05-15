@@ -1,18 +1,41 @@
 from scapy.all import IPv6, send, ICMPv6EchoRequest, sniff, TCP, UDP, Raw
 from Crypto.Cipher import CAST
 from Crypto.Util.Padding import pad, unpad
-from config import *
 import threading
 import ipaddress
 import time
 import warnings
 import random
+import sys
+import os
+# 获取当前文件的目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 获取父目录
+parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
+
+# 将父目录添加到sys.path
+sys.path.insert(0, parent_dir)
+
+from config import *
 
 
 # 忽略所有警告
 warnings.filterwarnings("ignore")
 
 status = CLOSED
+
+def extract_ipv6_prefix(ipv6_address, prefix_length):
+    # 将输入的字符串转换为 IPv6 对象
+    ipv6 = ipaddress.IPv6Address(ipv6_address)
+    
+    # 创建一个 IPv6 网络对象，使用输入地址和前缀长度
+    ipv6_network = ipaddress.IPv6Network((ipv6, prefix_length), strict=False)
+    
+    # 提取并返回前缀
+    return str(ipv6_network.network_address)
+    # IPv6 地址 2001:0db8:85a3:0000:0000:8a2e:0370:7334 -> 2001:db8:85a3::
+ 
 
 def expand_ipv6_address(address):
     ipv6_obj = ipaddress.IPv6Address(address)
@@ -55,7 +78,10 @@ def handle_packet(packet):
         # print(ciphertext)
         # 将密文分组解密
         plain_text = cast_decrypt_block(key, ciphertext)
-        plain_text = unpad(plain_text, 8)
+        try:
+            plain_text = unpad(plain_text, 8)
+        except ValueError:
+            pass
         all_plain_text += plain_text
     if dst_saddr_spoofable:
         # 提取源地址后 64 位
@@ -63,7 +89,10 @@ def handle_packet(packet):
         ciphertext = "".join(ciphertext)
         ciphertext = bytes.fromhex(ciphertext)
         plain_text = cast_decrypt_block(key, ciphertext)
-        plain_text = unpad(plain_text, 8)
+        try:
+            plain_text = unpad(plain_text, 8)
+        except ValueError:
+            pass
         all_plain_text += plain_text
     return all_plain_text
 
@@ -117,6 +146,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
                 srcv6 = srcv6 + ":" + encrypted_blocks_hex[i + 1][j : j + 4]
             complete_packet = packet_assemble(dstv6, srcv6, mode)
             send(complete_packet)
+            print(dstv6, srcv6)
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
@@ -175,7 +205,7 @@ def packet_handler(packet):
     if handle_packet(packet) == SYN_ACK_text and status == SYN_SENT:
         print("ESTABLISHED")
         status = ESTABLISHED
-        send_message(dst_address, ACK_text)
+        send_message(ACK_text)
         send_handler = threading.Thread(target = send_input)
         send_handler.start()
     elif status == ESTABLISHED:
@@ -184,24 +214,26 @@ def packet_handler(packet):
 
 def receive_message():
     # 启动嗅探器并调用回调函数
+    host_or_net = "host"
+    dst_addr_or_net = dst_address
+    if dst_saddr_spoofable:
+        host_or_net = "net"
+        dst_addr_or_net = extract_ipv6_prefix(dst_address, 64) + "/64"
+    filter_condition = ""
     if mode == 'I':
-        sniff(prn = packet_handler,
-              filter = "icmp6 and icmp6[0] == 128 and \
-                  src host " + dst_address,
-              store = 0)
+        filter_condition = "icmp6 and icmp6[0] == 128 and src"
     elif mode == 'T':
-        sniff(prn = packet_handler,
-              filter = "tcp and ip6[6] & 0x2 != 0 and \
-                  src host " + dst_address,
-              store = 0)
+        filter_condition = "tcp and ip6[6] & 0x2 != 0 and src"
     elif mode == 'U':
-        sniff(prn = packet_handler,
-              filter = "udp and \
-                  src host " + dst_address,
-              store = 0)
+        filter_condition = "udp and ip6 and src"
     else:
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
+    filter_condition = " ".join \
+        ([filter_condition, host_or_net, dst_addr_or_net])
+    sniff(filter = filter_condition,
+          prn = packet_handler,
+          store = 0)
 
 def send_input():
     # print("working")
