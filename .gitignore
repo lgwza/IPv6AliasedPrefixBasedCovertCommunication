@@ -1,3 +1,4 @@
 __pycache__/
 Client/__pycache__/
 Server/__pycache__/
+*.txt

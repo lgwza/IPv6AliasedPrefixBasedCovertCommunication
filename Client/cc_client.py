@@ -135,7 +135,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
                     srcv6 = srcv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
                 dstv6 = dst_address
             complete_packet = packet_assemble(dstv6, srcv6, mode)
-            send(complete_packet)
+            _ = send(complete_packet)
     elif dstv6_prefix != None and srcv6_prefix != None:
         for i in range(0, len(encrypted_blocks_hex), 2):
             dstv6 = dstv6_prefix
@@ -145,8 +145,9 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
             for j in range(0, len(encrypted_blocks_hex[i + 1]), 4):
                 srcv6 = srcv6 + ":" + encrypted_blocks_hex[i + 1][j : j + 4]
             complete_packet = packet_assemble(dstv6, srcv6, mode)
-            send(complete_packet)
-            print(dstv6, srcv6)
+            _ = send(complete_packet)
+            time.sleep(0.25)
+            # print(dstv6, srcv6)
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
@@ -189,10 +190,10 @@ def send_message(message):
         len(plain_text) // block_size % 2 != 0:
         plain_text = pad(plain_text, block_size)
     plaintext_blocks = [plain_text[i : i + block_size] for i in range(0, len(plain_text), block_size)]
-    print(plaintext_blocks)
+    # print(plaintext_blocks)
     encrypted_blocks = cast_encrypt_blocks(key, plaintext_blocks)
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
-    print(encrypted_blocks_hex)
+    # print(encrypted_blocks_hex)
     # print(dstv6_prefix)
     send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size)
     
@@ -200,8 +201,8 @@ def send_message(message):
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
     global status
-    print(packet[IPv6].src, packet[IPv6].dst)
-    print(f"status: {status}")
+    # print(packet[IPv6].src, packet[IPv6].dst)
+    # print(f"status: {status}")
     if handle_packet(packet) == SYN_ACK_text and status == SYN_SENT:
         print("ESTABLISHED")
         status = ESTABLISHED
@@ -210,7 +211,7 @@ def packet_handler(packet):
         send_handler.start()
     elif status == ESTABLISHED:
         plain_text = handle_packet(packet)
-        print(plain_text.decode('latin-1'))
+        print("received message:", plain_text.decode('latin-1'))
 
 def receive_message():
     # 启动嗅探器并调用回调函数
@@ -236,10 +237,16 @@ def receive_message():
           store = 0)
 
 def send_input():
-    # print("working")
-    while True:
-        Input = input("Please input your message: ")
-        send_message(Input)
+    if send_file_mode:
+        file_path = "random_text.txt"
+        with open(file_path, "r") as f:
+            send_message(f.read())
+        print("File sent!")
+        send_message(RST_text)
+    else:
+        while True:
+            Input = input("Please input your message: ")
+            send_message(Input)
 
 def init():
     global status

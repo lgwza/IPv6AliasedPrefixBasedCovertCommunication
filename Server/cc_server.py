@@ -6,6 +6,7 @@ import threading
 from Timer import Timer
 import sys
 import os
+from datetime import datetime, timedelta, timezone
 
 # 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,6 +23,23 @@ Timer1 = Timer()
 
 status = LISTEN
 
+received_messages = b""
+
+def save_to_file():
+    global received_messages
+    if isinstance(received_messages, bytes):
+        received_messages = received_messages.decode('latin-1')
+    # 设置时区东八区
+    now_utc = datetime.now()
+    # 设置东八区时区
+    east_8 = timezone(timedelta(hours=8))
+    # 转换为东八区时间并格式化为YYYYMMDDHHMM
+    now_east_8 = now_utc.astimezone(east_8)
+    formatted_time = now_east_8.strftime('%Y%m%d%H%M%S')
+    with open(f"received_messages_{formatted_time}.txt", "w") as f:
+        f.write(received_messages)
+
+
 def extract_ipv6_prefix(ipv6_address, prefix_length):
     # 将输入的字符串转换为 IPv6 对象
     ipv6 = ipaddress.IPv6Address(ipv6_address)
@@ -33,7 +51,6 @@ def extract_ipv6_prefix(ipv6_address, prefix_length):
     return str(ipv6_network.network_address)
     # IPv6 地址 2001:0db8:85a3:0000:0000:8a2e:0370:7334 -> 2001:db8:85a3::
     
-
 def expand_ipv6_address(address):
     ipv6_obj = ipaddress.IPv6Address(address)
     expanded_address = str(ipv6_obj.exploded)
@@ -68,9 +85,9 @@ def handle_packet(packet):
         ciphertext = bytes.fromhex(ciphertext)
         # print(ciphertext)
         # 将密文分组解密
-        print(ciphertext)
+        # print(ciphertext)
         plain_text = cast_decrypt_block(key, ciphertext)
-        print(plain_text)
+        # print(plain_text)
         try:
             plain_text = unpad(plain_text, 8)
         except ValueError:
@@ -82,20 +99,21 @@ def handle_packet(packet):
         ciphertext = "".join(ciphertext)
         ciphertext = bytes.fromhex(ciphertext)
         plain_text = cast_decrypt_block(key, ciphertext)
-        print(plain_text)
+        # print(plain_text)
         try:
             plain_text = unpad(plain_text, 8)
         except ValueError:
             pass
         all_plain_text += plain_text
-    print(all_plain_text)
+    # print(all_plain_text)
     return all_plain_text
 
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
-    global status, source_address, dst_address
-    print("Source IPv6 address: ", packet[IPv6].src)
-    print("status: ", status)
+    global status, source_address, dst_address, \
+        received_messages
+    # print("Source IPv6 address: ", packet[IPv6].src)
+    # print("status: ", status)
 
     if handle_packet(packet) == SYN_text and status == LISTEN:
         print("SYN_RECEIVED")
@@ -109,13 +127,23 @@ def packet_handler(packet):
         print("ESTABLISHED")
         # TODO 需要更严谨的逻辑
         status = ESTABLISHED
-        # print("dst_address: ", dst_address)
         send_handler = threading.Thread(target = send_input)
         send_handler.start()
+        Timer1.start()
+        print("Timer started")
     elif status == ESTABLISHED:
         plain_text = handle_packet(packet)
         print("received message:", plain_text.decode('latin-1'))
-            
+        received_messages += plain_text # 字节串
+        if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
+            print("FINISHED")
+            received_messages = received_messages[:-8]
+            save_to_file()
+            Timer1.end()
+            print("Timer stopped")
+            print("Time elapsed:", Timer1.get_time())
+            exit(0)
+        
 def receive_message():
     # 启动嗅探器并调用回调函数
     host_or_net = "host"
@@ -222,10 +250,10 @@ def send_message(message):
         len(plain_text) // block_size % 2 != 0:
         plain_text = pad(plain_text, block_size)
     plaintext_blocks = [plain_text[i : i + block_size] for i in range(0, len(plain_text), block_size)]
-    print(plaintext_blocks)
+    # print(plaintext_blocks)
     encrypted_blocks = cast_encrypt_blocks(key, plaintext_blocks)
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
-    print(encrypted_blocks_hex)
+    # print(encrypted_blocks_hex)
     # print(dstv6_prefix)
     send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size)
 
