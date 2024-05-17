@@ -36,7 +36,7 @@ source_daddr_spoofable = spoofable_info[source_address][1] # 源端目的地址�
 dst_saddr_spoofable = spoofable_info[dst_address][0] # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
 dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
-mode = 'T'
+mode = 'U'
 send_file_mode = True
 
 
