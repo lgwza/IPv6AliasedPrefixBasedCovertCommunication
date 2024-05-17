@@ -158,6 +158,9 @@ def receive_message():
         filter_condition = "tcp and ip6[6] & 0x2 != 0 and src"
     elif mode == 'U':
         filter_condition = "udp and ip6 and src"
+    elif mode == 'R':
+        filter_condition = "(icmp6 and icmp6[0] == 128) or \
+            (tcp and ip6[6] & 0x2 != 0) or (udp and ip6) and src"
     else:
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
@@ -167,7 +170,7 @@ def receive_message():
           prn = packet_handler,
           store = 0)
 
-def packet_assemble(dstv6, srcv6, mode):
+def gen_packet(dstv6, srcv6, mode):
     ipv6_layer = IPv6(src = srcv6, dst = dstv6)
     if mode == 'I':
         complete_packet = ipv6_layer / ICMPv6EchoRequest()
@@ -184,7 +187,21 @@ def packet_assemble(dstv6, srcv6, mode):
     else:
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
+    
     return complete_packet
+
+def packet_assemble(dstv6, srcv6, mode):
+    if mode != 'R':
+        complete_packet = gen_packet(dstv6, srcv6, mode)
+        return complete_packet
+    elif mode == 'R': # random mode
+        modes = ['I', 'T', 'U']
+        mode = random.choice(modes)
+        complete_packet = gen_packet(dstv6, srcv6, mode)
+        return complete_packet
+    else:
+        print(f"ERROR! MODE {mode} IS NOT DEFINED!")
+        exit(-1)
 
 def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8):
     # TODO 自动获取源地址
