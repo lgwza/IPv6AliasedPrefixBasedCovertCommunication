@@ -37,6 +37,8 @@ dst_saddr_spoofable = spoofable_info[dst_address][0] # 对端源地址可搭载�
 dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
 mode = 'T'
+send_file_mode = True
+
 
 key = get_key()
 initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
@@ -44,6 +46,8 @@ SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'
 ACK_text = b'\x08\x07\x06\x05\x08\x07\x06\x05'
 RST_text = b'\x01\x01\x02\x02\x03\x03\x04\x04'
+
+
 
 CLOSED = 0
 LISTEN = 1
