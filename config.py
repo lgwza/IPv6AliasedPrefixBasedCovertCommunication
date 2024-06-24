@@ -39,18 +39,11 @@ dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭�
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
 proto_list = ['I', 'U', 'T', 'S', 'Raw']
-<<<<<<< HEAD
-mode = 'A' # alternate mode
-if mode == 'NDP':
-    source_saddr_spoofable = False
-    source_daddr_spoofable = False
-=======
 # proto_list = ['I', 'U', 'T']
 mode = 'A'
 if mode == 'NDP':
     source_saddr_spoofable = False
     dst_saddr_spoofable = False
->>>>>>> 00e8f1c7f845811edd4fad65601b56f9b8856180
 
 filter_condition_dict = {
     'I': 'icmp6 and icmp6[0] == 128',
