@@ -38,9 +38,27 @@ dst_saddr_spoofable = spoofable_info[dst_address][0] # 对端源地址可搭载�
 dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
 # I for ICMPv6, U for UDP, T for TCP, 
-# A for Alternate, R for Random
-mode = 'U'
+# S for SCTP, R for Raw
+proto_list = ['I', 'U', 'T', 'S', 'Raw']
+# proto_list = ['I', 'U', 'T']
+mode = 'A'
+if mode == 'NDP':
+    source_saddr_spoofable = False
+    dst_saddr_spoofable = False
+
+filter_condition_dict = {
+    'I': 'icmp6 and icmp6[0] == 128',
+    'U': 'udp and ip6',
+    'T': 'tcp and ip6[6] & 0x2 != 0',
+    'S': 'sctp and ip6',
+    'Raw': 'ip6 and ip6[6] == 59',
+    'NDP': 'icmp6 and ip6[40] == 135'
+}
+
 send_file_mode = True
+sleep_time = 0.25
+if mode == 'A':
+    sleep_time /= 1.25
 
 
 key = get_key()
