@@ -1,4 +1,6 @@
-from scapy.all import sniff, IPv6, ICMPv6EchoRequest, send, Raw, UDP, TCP
+from scapy.all import sniff, IPv6, ICMPv6EchoRequest,\
+    send, Raw, UDP, TCP, SCTP, SCTPChunkData
+
 from Crypto.Cipher import CAST
 from Crypto.Util.Padding import pad, unpad
 import ipaddress
@@ -23,7 +25,18 @@ Timer1 = Timer()
 
 status = LISTEN
 
+last_mode = ''
+next_mode = {}
+
 received_messages = b""
+
+def gen_next_mode_dict():
+    global proto_list, next_mode
+    for i in range(len(proto_list)):
+        next_mode[proto_list[i]] = proto_list[(i + 1) % len(proto_list)]
+    next_mode[''] = proto_list[0]
+
+
 
 def save_to_file():
     global received_messages
@@ -152,56 +165,71 @@ def receive_message():
         host_or_net = "net"
         dst_addr_or_net = extract_ipv6_prefix(dst_address, 64) + "/64"
     filter_condition = ""
-    if mode == 'I':
-        filter_condition = "icmp6 and icmp6[0] == 128 and src"
-    elif mode == 'T':
-        filter_condition = "tcp and ip6[6] & 0x2 != 0 and src"
-    elif mode == 'U':
-        filter_condition = "udp and ip6 and src"
-    elif mode == 'R':
-        filter_condition = "(icmp6 and icmp6[0] == 128) or \
-            (tcp and ip6[6] & 0x2 != 0) or (udp and ip6) and src"
+    if mode != 'R' and mode != 'A':
+        filter_condition = filter_condition_dict[mode]
+    elif mode == 'R' or mode == 'A':
+        for i in range(len(proto_list)):
+            if i == 0:
+                filter_condition = '(' + filter_condition_dict[proto_list[i]] + ')'
+            else:
+                filter_condition = " ".join \
+                    ([filter_condition, 'or', '(' + filter_condition_dict[proto_list[i]] + ')'])
     else:
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
-    filter_condition = " ".join \
-        ([filter_condition, host_or_net, dst_addr_or_net])
+    if mode != 'NDP':
+        filter_condition = " ".join \
+            ([filter_condition, 'and src', host_or_net, dst_addr_or_net])
+    
     sniff(filter = filter_condition,
           prn = packet_handler,
           store = 0)
 
-def gen_packet(dstv6, srcv6, mode):
+def gen_packet(dstv6, srcv6, proto):
     ipv6_layer = IPv6(src = srcv6, dst = dstv6)
-    if mode == 'I':
+    if proto == 'I':
         complete_packet = ipv6_layer / ICMPv6EchoRequest()
-    elif mode == 'T':
+    elif proto == 'T':
         complete_packet = ipv6_layer / \
         TCP(sport = random.randint(4096, 65535),
             dport = random.randint(1, 65535),
             flags = "S")
-    elif mode == 'U':
+    elif proto == 'U':
         complete_packet = ipv6_layer / \
         UDP(sport = random.randint(4096, 65535),
             dport = random.randint(1, 65535)) / \
         Raw(load = b'Hello, UDP')
+    elif proto == 'S':
+        complete_packet = ipv6_layer / \
+        SCTP(sport = random.randint(4096, 65535),
+            dport = random.randint(1, 65535),
+            tag = 1) / \
+        SCTPChunkData(data = 'Hello, SCTP')
+    elif proto == 'Raw':
+        complete_packet = ipv6_layer / Raw(load = b'Hello, Raw')
     else:
-        print(f"ERROR! MODE {mode} IS NOT DEFINED!")
+        print(f"ERROR! MODE {proto} IS NOT DEFINED!")
         exit(-1)
-    
+    # print(complete_packet.summary())
     return complete_packet
 
 def packet_assemble(dstv6, srcv6, mode):
-    if mode != 'R':
+    global proto_list
+    if mode != 'R' and mode != 'A' and mode != 'NDP':
         complete_packet = gen_packet(dstv6, srcv6, mode)
-        return complete_packet
     elif mode == 'R': # random mode
-        modes = ['I', 'T', 'U']
-        mode = random.choice(modes)
+        mode = random.choice(proto_list)
+        # print(mode)
         complete_packet = gen_packet(dstv6, srcv6, mode)
-        return complete_packet
+    elif mode == 'A' or mode == 'NDP': # Alternate mode
+        global last_mode, next_mode
+        now_mode = next_mode[last_mode]
+        last_mode = now_mode
+        complete_packet = gen_packet(dstv6, srcv6, now_mode)
     else:
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
+    return complete_packet
 
 def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8):
     # TODO 自动获取源地址
@@ -281,6 +309,7 @@ def send_input():
 
 
 if __name__ == "__main__":
+    gen_next_mode_dict()
     # subprocess.Popen(["python3", "ND_NA.py"])
     listen_handler = threading.Thread(target = receive_message)
     listen_handler.start()
