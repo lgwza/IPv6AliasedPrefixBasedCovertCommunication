@@ -1,6 +1,5 @@
 from scapy.all import sniff, IPv6, ICMPv6EchoRequest,\
     send, Raw, UDP, TCP, SCTP, SCTPChunkData
-
 from Crypto.Cipher import CAST
 from Crypto.Util.Padding import pad, unpad
 import ipaddress
@@ -9,6 +8,8 @@ from Timer import Timer
 import sys
 import os
 from datetime import datetime, timedelta, timezone
+import random
+import time
 
 # 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,9 +20,9 @@ parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 # 将父目录添加到sys.path
 sys.path.insert(0, parent_dir)
 from config import *
-import random
+from error_handle import *
 
-Timer1 = Timer()
+timer = Timer()
 
 status = LISTEN
 
@@ -29,6 +30,14 @@ last_mode = ''
 next_mode = {}
 
 received_messages = b""
+expected_seq = 0
+receive_cache = CACHE(100)
+send_cache = CACHE(100)
+Ack = ACK()
+Seq = SEQ()
+
+send_packet_pause_event = threading.Event()
+send_packet_pause_event.set()
 
 def gen_next_mode_dict():
     global proto_list, next_mode
@@ -49,7 +58,7 @@ def save_to_file():
     # 转换为东八区时间并格式化为YYYYMMDDHHMM
     now_east_8 = now_utc.astimezone(east_8)
     formatted_time = now_east_8.strftime('%Y%m%d%H%M%S')
-    with open(f"received_messages_{formatted_time}.txt", "w") as f:
+    with open(f"Received_Messages/received_messages_{formatted_time}.txt", "w") as f:
         f.write(received_messages)
 
 
@@ -121,13 +130,43 @@ def handle_packet(packet):
     # print(all_plain_text)
     return all_plain_text
 
+def packet_seq(packet):
+    if 'TCP' in packet:
+        return packet['TCP'].seq
+    elif 'ICMPv6EchoRequest' in packet:
+        return packet['ICMPv6EchoRequest'].seq
+    elif 'UDP' in packet:
+        return packet['UDP'].sport
+    else:
+        return -1
+
+def packet_proto(packet):
+    if 'TCP' in packet:
+        return 'T'
+    elif 'ICMPv6EchoRequest' in packet:
+        return 'I'
+    elif 'UDP' in packet:
+        return 'U'
+    else:
+        return ''
+    
+def retransmit_cache(ack_num):
+    global send_cache
+    time.sleep(sleep_time) # 触发重传事件后休眠 2 秒
+    # 将发送缓存中的 seq_num 之后的数据包重传
+    for packet in send_cache.iter():
+        if packet_seq(packet) >= ack_num:
+            send(packet)
+            time.sleep(sleep_time)
+            print("Retransmitting packet with seq_num:", packet_seq(packet))
+            
+
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
     global status, source_address, dst_address, \
-        received_messages
+        received_messages, expected_seq
     # print("Source IPv6 address: ", packet[IPv6].src)
     # print("status: ", status)
-
     if handle_packet(packet) == SYN_text and status == LISTEN:
         print("SYN_RECEIVED")
         status = SYN_RECEIVED
@@ -135,28 +174,50 @@ def packet_handler(packet):
         # print(packet[IPv6].src)
         # print("dst_address: ", dst_address)
         send_message(SYN_ACK_text)
-        
+        Ack.set_ack(packet_seq(packet) + 1)
+        receive_cache.update(packet)
+
     elif handle_packet(packet) == ACK_text and status == SYN_RECEIVED:
         print("ESTABLISHED")
         # TODO 需要更严谨的逻辑
         status = ESTABLISHED
         send_handler = threading.Thread(target = send_input)
         send_handler.start()
-        Timer1.start()
+        timer.start()
         print("Timer started")
+        Ack.ack_plus()
+        receive_cache.update(packet)
     elif status == ESTABLISHED:
+        packet_seq_num = packet_seq(packet)
+        proto = packet_proto(packet)
         plain_text = handle_packet(packet)
         print("received message:", plain_text.decode('latin-1'))
+        print(packet_seq_num, Ack.get_ack(proto), proto)
+        if handle_packet(packet) == ACK_text:
+            send_packet_pause_event.clear()
+            retransmit_cache(packet_seq_num)
+            send_packet_pause_event.set()
+            return
+        if packet_seq_num == Ack.get_ack(proto):
+            Ack.ack_plus()
+            receive_cache.update(packet)
+        else:
+            
+            send_message(ACK_text, type = 'A')
+            return
+        
         received_messages += plain_text # 字节串
+        print(f"received_message_length: {len(received_messages)}")
         if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
             print("FINISHED")
             received_messages = received_messages[:-8]
             save_to_file()
-            Timer1.end()
+            timer.end()
             print("Timer stopped")
-            print("Time elapsed:", Timer1.get_time())
+            print("Time elapsed:", timer.get_time())
             exit(0)
-        
+
+
 def receive_message():
     # 启动嗅探器并调用回调函数
     host_or_net = "host"
@@ -185,53 +246,62 @@ def receive_message():
           prn = packet_handler,
           store = 0)
 
-def gen_packet(dstv6, srcv6, proto):
+# proto: I ICMPv6, T TCP, U UDP, S SCTP, Raw Raw
+# type: D Data, A ACK
+def gen_packet(dstv6, srcv6, proto, type = 'D'):
+    if type == 'D':
+        now_seq = Seq.get_seq(proto)
+    elif type == 'A':
+        now_seq = Ack.get_ack(proto)
     ipv6_layer = IPv6(src = srcv6, dst = dstv6)
     if proto == 'I':
-        complete_packet = ipv6_layer / ICMPv6EchoRequest()
+        complete_packet = ipv6_layer / \
+            ICMPv6EchoRequest(seq = now_seq) # TODO 设计一个类
     elif proto == 'T':
         complete_packet = ipv6_layer / \
         TCP(sport = random.randint(4096, 65535),
             dport = random.randint(1, 65535),
-            flags = "S")
+            flags = "S",
+            seq = now_seq)
     elif proto == 'U':
         complete_packet = ipv6_layer / \
-        UDP(sport = random.randint(4096, 65535),
+        UDP(sport = now_seq,
             dport = random.randint(1, 65535)) / \
         Raw(load = b'Hello, UDP')
     elif proto == 'S':
         complete_packet = ipv6_layer / \
-        SCTP(sport = random.randint(4096, 65535),
-            dport = random.randint(1, 65535),
-            tag = 1) / \
+        SCTP(sport = now_seq,
+             dport = random.randint(1, 65535),
+             tag = 1) / \
         SCTPChunkData(data = 'Hello, SCTP')
-    elif proto == 'Raw':
-        complete_packet = ipv6_layer / Raw(load = b'Hello, Raw')
     else:
         print(f"ERROR! MODE {proto} IS NOT DEFINED!")
         exit(-1)
     # print(complete_packet.summary())
     return complete_packet
 
-def packet_assemble(dstv6, srcv6, mode):
+def packet_assemble(dstv6, srcv6, mode, type = 'D'):
     global proto_list
     if mode != 'R' and mode != 'A' and mode != 'NDP':
-        complete_packet = gen_packet(dstv6, srcv6, mode)
+        complete_packet = gen_packet(dstv6, srcv6, mode, type)
     elif mode == 'R': # random mode
         mode = random.choice(proto_list)
         # print(mode)
-        complete_packet = gen_packet(dstv6, srcv6, mode)
+        complete_packet = gen_packet(dstv6, srcv6, mode, type)
     elif mode == 'A' or mode == 'NDP': # Alternate mode
         global last_mode, next_mode
         now_mode = next_mode[last_mode]
         last_mode = now_mode
-        complete_packet = gen_packet(dstv6, srcv6, now_mode)
+        complete_packet = gen_packet(dstv6, srcv6, now_mode, type)
     else:
         print(f"ERROR! MODE {mode} IS NOT DEFINED!")
         exit(-1)
+    send_packet_pause_event.wait()
+    Seq.seq_plus()
+    send_cache.update(complete_packet)
     return complete_packet
 
-def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8):
+def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8, type = 'D'):
     # TODO 自动获取源地址
     global source_address, mode
     # 将密文附着于 IPv6 目的地址后 64 位，依次发送
@@ -250,7 +320,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
                 for j in range(0, len(encrypted_blocks_hex[i]), 4):
                     srcv6 = srcv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
                 dstv6 = dst_address
-            complete_packet = packet_assemble(dstv6, srcv6, mode)
+            complete_packet = packet_assemble(dstv6, srcv6, mode, type)
             send(complete_packet)
     elif dstv6_prefix != None and srcv6_prefix != None:
         for i in range(0, len(encrypted_blocks_hex), 2):
@@ -260,13 +330,13 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
                 dstv6 = dstv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
             for j in range(0, len(encrypted_blocks_hex[i + 1]), 4):
                 srcv6 = srcv6 + ":" + encrypted_blocks_hex[i + 1][j : j + 4]
-            complete_packet = packet_assemble(dstv6, srcv6, mode)
+            complete_packet = packet_assemble(dstv6, srcv6, mode, type)
             send(complete_packet)
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
 
-def send_message(message):
+def send_message(message, type = 'D'):
     plain_text = message
     if isinstance(message, str):
         plain_text = message.encode()
@@ -300,7 +370,7 @@ def send_message(message):
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
     # print(encrypted_blocks_hex)
     # print(dstv6_prefix)
-    send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size)
+    send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size, type)
 
 def send_input():
     while True:

@@ -38,8 +38,8 @@ dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭�
 
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
-proto_list = ['I', 'U', 'T', 'S', 'Raw']
-# proto_list = ['I', 'U', 'T']
+# proto_list = ['I', 'U', 'T', 'S', 'Raw']
+proto_list = ['U']
 mode = 'A'
 if mode == 'NDP':
     source_saddr_spoofable = False
@@ -55,17 +55,18 @@ filter_condition_dict = {
 }
 
 send_file_mode = True
-sleep_time = 0.25
-if mode == 'A':
-    sleep_time /= 1.25
+sleep_time = 0.2
 
 
-key = get_key()
+
+# key = get_key()
+key = b"12345705"
 initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
 SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'
 ACK_text = b'\x08\x07\x06\x05\x08\x07\x06\x05'
 RST_text = b'\x01\x01\x02\x02\x03\x03\x04\x04'
+
 
 
 
