@@ -28,13 +28,15 @@ src_dst_ip_set = {"2402:f000:6:1e00::232",
                    "2401:c080:1000:4662:3eec:efff:feb9:8630"}
 dst_address = list(src_dst_ip_set - {source_address})[0]
 # print(dst_address)
+
+# 该地址的源地址能否发送信息，目的地址能否接收信息
 spoofable_info = {"2402:f000:6:1e00::232": [False, True],
                   "2401:c080:1000:4662:3eec:efff:feb9:8630": [True, True]}
 
 source_saddr_spoofable = spoofable_info[source_address][0] # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
-source_daddr_spoofable = spoofable_info[source_address][1] # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
+source_daddr_spoofable = spoofable_info[dst_address][1] # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
 dst_saddr_spoofable = spoofable_info[dst_address][0] # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
-dst_daddr_spoofable = spoofable_info[dst_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
+dst_daddr_spoofable = spoofable_info[source_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
@@ -60,7 +62,7 @@ sleep_time = 0.2
 
 
 # key = get_key()
-key = b"12345705"
+key = b"12345709"
 initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
 SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'
