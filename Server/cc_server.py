@@ -35,43 +35,12 @@ def retransmit_cache(ack_num):
             print("Retransmitting packet with seq_num:", packet_seq(packet))
             
 
-def packet_seq(packet):
-    if 'TCP' in packet:
-        return packet['TCP'].seq
-    elif 'ICMPv6EchoRequest' in packet:
-        return packet['ICMPv6EchoRequest'].seq
-    elif 'UDP' in packet:
-        return packet['UDP'].sport
-    else:
-        return -1
-
-def packet_proto(packet):
-    if 'TCP' in packet:
-        return 'T'
-    elif 'ICMPv6EchoRequest' in packet:
-        return 'I'
-    elif 'UDP' in packet:
-        return 'U'
-    else:
-        return ''
-    
-def retransmit_cache(ack_num):
-    global send_cache
-    time.sleep(sleep_time) # 触发重传事件后休眠 2 秒
-    # 将发送缓存中的 seq_num 之后的数据包重传
-    for packet in send_cache.iter():
-        if packet_seq(packet) >= ack_num:
-            send(packet)
-            time.sleep(sleep_time)
-            print("Retransmitting packet with seq_num:", packet_seq(packet))
-            
-
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
     global status, source_address, dst_address, \
         received_messages, expected_seq
-    # print("Source IPv6 address: ", packet[IPv6].src)
-    # print("status: ", status)
+    print("Source IPv6 address: ", packet[IPv6].src)
+    print("status: ", status)
     if handle_packet(packet) == SYN_text and status == LISTEN:
         print("SYN_RECEIVED")
         status = SYN_RECEIVED
