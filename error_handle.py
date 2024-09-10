@@ -151,7 +151,6 @@ class CACHE:
         if self.is_sendable():
             return self.cache[self.send_ptr]
     
-<<<<<<< HEAD
     def get_packet_list(self):
         # 从 send_ptr 到 tail
         lis = []
@@ -163,10 +162,6 @@ class CACHE:
         return lis
     
     def send_ptr_plus(self):
-=======
-    def send_ptr_plus(self):
-        
->>>>>>> 0b7d551bf14385ca2199696829a100ea89482681
         self.send_ptr = (self.send_ptr + 1) % self.size
         return True
     
