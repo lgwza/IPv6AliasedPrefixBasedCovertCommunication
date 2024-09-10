@@ -24,7 +24,6 @@ except:
 source_address = result_src
 source_mac = result_mac
 source_iface = result_dev
-
 src_dst_ip_set = {"2402:f000:6:1e00::232",
                    "2401:c080:1000:4662:3eec:efff:feb9:8630"}
 # dst_address = list(src_dst_ip_set - {source_address})[0]
@@ -70,6 +69,7 @@ SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'
 ACK_text = b'\x08\x07\x06\x05\x08\x07\x06\x05'
 RST_text = b'\x01\x01\x02\x02\x03\x03\x04\x04'
+
 
 
 

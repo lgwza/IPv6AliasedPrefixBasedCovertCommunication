@@ -1,37 +1,33 @@
-from Crypto.Cipher import CAST
-from Crypto.Util.Padding import pad, unpad
-from datetime import datetime, timedelta, timezone
+import threading
+import time
 
-def encrypt(message, key):
-    cipher = CAST.new(key, CAST.MODE_ECB)
-    return cipher.encrypt(message)
+# 创建一个全局的 Event 对象
+pause_event = threading.Event()
 
-def decrypt(ciphertext, key):
-    cipher = CAST.new(key, CAST.MODE_ECB)
-    return cipher.decrypt(ciphertext)
+def worker():
+    print("Worker started")
+    while True:
+        print("Working...")
+        time.sleep(1)
+        # 检查是否要暂停
+        pause_event.wait()  # 等待 Event 被设置为可执行状态
+        print("Resumed...")
 
-# 测试
-empty_message = b'12345678'
-key = b'01234567'  # 8字节的密钥
+# 创建并启动线程
+thread = threading.Thread(target=worker)
+thread.start()
 
-# 加密
-padded_message = pad(empty_message, 8)  # 对空串进行填充
-print("填充后的消息:", padded_message)
-ciphertext = encrypt(padded_message, key)
-print("加密后的消息:", ciphertext)
+# 主线程等待一段时间后暂停工作线程
+time.sleep(3)
+print("Pausing the worker thread...")
+pause_event.clear()  # 设置 Event 为不可执行状态，暂停线程
 
-# 解密
-decrypted_message = decrypt(ciphertext, key)
-print(decrypted_message)
-print("解密后的消息:", unpad(decrypted_message, 8).decode('utf-8'))  # 移除填充后输出
+# 主线程等待一段时间后恢复工作线程
+time.sleep(3)
+print("Resuming the worker thread...")
+pause_event.set()  # 设置 Event 为可执行状态，恢复线程
 
-# print(unpad(b"12345678", 8))
-# 设置时区东八区
-now_utc = datetime.now()
-# 设置东八区时区
-east_8 = timezone(timedelta(hours=8))
-# 转换为东八区时间并格式化为YYYYMMDDHHMM
-now_east_8 = now_utc.astimezone(east_8)
-formatted_time = now_east_8.strftime('%Y%m%d%H%M%S')
-
-print(formatted_time)
+# 主线程等待一段时间后结束工作线程
+time.sleep(3)
+print("Stopping the worker thread...")
+# 停止线程的典型方式是通过设置一个退出标志，使得线程在下一次循环检测时退出
