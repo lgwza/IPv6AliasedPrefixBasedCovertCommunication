@@ -117,13 +117,8 @@ def retransmit_cache(ack_num):
 def packet_handler(packet):
     global status, source_address, dst_address, \
         received_messages, expected_seq
-<<<<<<< HEAD
-    print("Source IPv6 address: ", packet[IPv6].src)
-    print("status: ", status)
-=======
     # print("Source IPv6 address: ", packet[IPv6].src)
     # print("status: ", status)
->>>>>>> 0b7d551bf14385ca2199696829a100ea89482681
     if handle_packet(packet) == SYN_text and status == LISTEN:
         print("SYN_RECEIVED")
         status = SYN_RECEIVED
