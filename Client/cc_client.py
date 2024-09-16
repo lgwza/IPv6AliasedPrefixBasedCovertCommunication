@@ -1,7 +1,7 @@
+
+from datetime import datetime, timedelta, timezone
 import sys
 import os
-from datetime import datetime, timedelta, timezone
-
 # 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -32,7 +32,15 @@ from config import *
 from error_handle import *
 
 from Common_Modules.common_modules import *
+from Common_Modules.timers import *
+from Common_Modules.ack_send import send_ack
+from Common_Modules.data_resend import resend_data
+from Common_Modules.set_flag import flag_set
 
+
+
+ack_event_timer = ResettableTimer(0.2, send_ack, receive_window)
+resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
 
 
 # 忽略所有警告
@@ -48,6 +56,8 @@ def retransmit_cache_event(ack_num):
     retransmit_flag = True
     
     
+
+    
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
     global status, source_address, dst_address, \
@@ -59,6 +69,7 @@ def packet_handler(packet):
         status = ESTABLISHED
         send_message(ACK_text)
         
+        receive_window.init_window(packet_seq(packet) + 1)
         Ack.set_ack(packet_seq(packet) + 1)
         receive_cache.update(packet)
         
@@ -68,10 +79,30 @@ def packet_handler(packet):
         timer.start()
         print("Timer started")
     elif status == ESTABLISHED:
-        plain_text = handle_packet(packet)
-        print("received message:", plain_text.decode('latin-1'))
-        packet_seq_num = packet_seq(packet)
-        proto = packet_proto(packet)
+        ack_event_timer.reset() # 收到包后计时重置
+        plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
+        # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
+        
+        print(f"plain_text: {plain_text}")
+        print(f"packet_type: {packet_type}")
+        print(f"packet_seq_num: {packet_seq_num}")
+        print(f"proto: {proto}")
+        
+        if packet_type == 'ACK' or packet_type == 'SACK':
+            resend_data_event_timer.reset()
+            # 对端已接收，需要在发送窗口中标记对端已接收
+            flag_set(send_window, packet_seq_num, packet_type)
+            resend_data(send_window, send_cache, packet_seq_num, packet_type)
+        elif packet_type == 'DATA':
+            if not receive_window.is_in_window(packet_seq_num):
+                send_ack()
+            else:
+                # 收到的包在接收窗口内
+                # 在接收窗口中标记已接收
+                flag_set(receive_window, packet_seq_num, packet_type)
+        
+        # packet_seq_num = packet_seq(packet)
+        # proto = packet_proto(packet)
         if handle_packet(packet) == ACK_text:
             print("ACK received")
             send_packet_pause_event.clear()
@@ -116,7 +147,6 @@ def cache_send():
         # else:
         #     time.sleep(sleep_time * 2)
 
-    
     
 def send_input():
     if send_file_mode:

@@ -1,9 +1,10 @@
 import random
+import queue
 
-TCP_MAX = 2 ** 32 - 1
-ICMP_MAX = 2 ** 16 - 1
-UDP_MAX = 2 ** 16 - 1
-SCTP_MAX = 2 ** 16 - 1
+TCP_MAX = 2 ** 32 - 2
+ICMP_MAX = 2 ** 16 - 2
+UDP_MAX = 2 ** 16 - 2
+SCTP_MAX = 2 ** 16 - 2
 
 class SEQ:
     def __init__(self):
@@ -80,6 +81,80 @@ class ACK:
             return self.get_ack_sctp()
         else:
             return -1
+        
+class RECEIVE_WINDOW:
+    def __init__(self, window_size = 1000):
+        self.window_size = window_size
+        self.window = [False] * window_size
+        self.left = 0 # 序列号区间左端点
+        self.right = 0 # 序列号区间右端点
+        self.ack_max = UDP_MAX
+    
+    def add_window_size(self, size):
+        self.window_size += size
+        self.window += [False] * size
+        return True
+    
+    def minus_window_size(self, size):
+        self.window_size -= size
+        self.window = self.window[: -size]
+        return True
+    
+    def init_window(self, left):
+        self.left = left
+        self.right = (self.left + self.window_size - 1) % self.ack_max
+        return True
+    
+    def is_in_window(self, seq):
+        if self.left <= seq and seq <= self.right:
+            return True
+        if self.right < self.left and (self.left <= seq or seq <= self.right):
+            return True
+        return False
+    
+    def move_right(self, step):
+        self.left = (self.left + step) % self.ack_max
+        self.right = (self.right + step) % self.ack_max
+        
+        que = queue.Queue()
+        
+        for i in range(len(self.window)):
+            que.put(self.window[i])
+        # 移动 window
+        for i in range(step):
+            que.get()
+            que.put(False)
+        for i in range(len(self.window)):
+            self.window[i] = que.get()
+        
+        return True
+    
+    
+class SEND_WINDOW:
+    def __init__(self, window_size = 1000):
+        self.window_size = window_size
+        self.window = [False] * window_size # 是否收到确认
+        self.left = 0
+        self.right = 0
+        self.seq_max = UDP_MAX
+        
+    def add_window_size(self, size):
+        self.window_size += size
+        self.window += [False] * size
+        return True
+    
+    def minus_window_size(self, size):
+        self.window_size -= size
+        self.window = self.window[: -size]
+        return True
+    
+    def init_window(self, left):
+        self.left = left
+        self.right = (self.left + self.window_size - 1) % self.seq_max
+        return True
+    
+    
+        
     
 class CACHE:
     # 队列缓存
@@ -122,10 +197,10 @@ class CACHE:
             return None
         # 从头到尾遍历
         lis = []
-        i = self.head
-        while i != self.tail:
-            lis.append(self.cache[i])
-            i = (i + 1) % self.size
+        if self.head < self.tail:
+            lis = self.cache[self.head : self.tail]
+        else:
+            lis = self.cache[self.head :] + self.cache[: self.tail]
         return lis
     
     def is_sendable(self):
@@ -145,6 +220,7 @@ class CACHE:
         if (self.send_ptr - self.head + self.size) % self.size > self.size * 0.1:
             return True
         return False
+    
         
     
     def get_packet(self):

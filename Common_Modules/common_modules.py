@@ -46,6 +46,9 @@ send_cache = CACHE(10000)
 Ack = ACK()
 Seq = SEQ()
 
+receive_window = RECEIVE_WINDOW(5000)
+send_window = SEND_WINDOW(5000)
+
 send_packet_pause_event = threading.Event()
 send_packet_pause_event.set()
 
@@ -58,7 +61,7 @@ def gen_next_mode_dict():
     for i in range(len(proto_list)):
         next_mode[proto_list[i]] = proto_list[(i + 1) % len(proto_list)]
     next_mode[''] = proto_list[0]
-    
+
     
 def save_to_file():
     global received_messages
@@ -133,7 +136,37 @@ def handle_packet(packet):
         except ValueError:
             pass
         all_plain_text += plain_text
-    return all_plain_text
+    proto = packet_proto(packet)
+    
+    # 判定包类型
+    # NEW_ACK_text = b'\x08\x07\x06\x05\x04\x03'
+    # SACK_text = b'\x01\x02\x01\x02'
+    if len(all_plain_text) == 8:
+        # 前 6 个字节为
+        if all_plain_text[: 6] == NEW_ACK_text:
+            packet_seq_num = int.from_bytes(all_plain_text[6 :], 'big')
+            return all_plain_text, 'ACK', packet_seq_num, proto
+        elif all_plain_text[: 4] == SACK_text:
+            packet_seq_num = [(int.from_bytes(all_plain_text[4 : 6], 'big'), \
+                               int.from_bytes(all_plain_text[6 :], 'big'))]
+    
+    elif len(all_plain_text) == 16:
+        if all_plain_text[: 6] == NEW_ACK_text:
+            packet_seq_num = int.from_bytes(all_plain_text[6 : 8], 'big')
+            return all_plain_text, 'ACK', packet_seq_num, proto
+        elif all_plain_text[: 4] == SACK_text:
+            packet_seq_num = [(int.from_bytes(all_plain_text[4 : 6], 'big'), \
+                               int.from_bytes(all_plain_text[6 : 8], 'big'))]
+            if all_plain_text[8 : 12] == SACK_text:
+                packet_seq_num.append((int.from_bytes(all_plain_text[12 : 14], 'big'), \
+                                       int.from_bytes(all_plain_text[14 :], 'big')))
+            return all_plain_text, 'SACK', packet_seq_num, proto
+    
+    # 处理 'DATA' 类型的包
+    packet_seq_num = packet_seq(packet)
+    
+    
+    return all_plain_text, 'DATA', packet_seq_num, proto
 
 def packet_seq(packet):
     if 'TCP' in packet:
@@ -192,8 +225,8 @@ def receive_message(caller_module):
     
 # proto: I ICMPv6, T TCP, U UDP, S SCTP, Raw Raw
 # type: D Data, A ACK
-def gen_packet(dstv6, srcv6, proto, type = 'D'):
-    if type == 'D':
+def gen_packet(dstv6, srcv6, proto, type = 'DATA'):
+    if type == 'DATA':
         now_seq = Seq.get_seq(proto)
     elif type == 'A':
         now_seq = Ack.get_ack(proto)
@@ -224,7 +257,7 @@ def gen_packet(dstv6, srcv6, proto, type = 'D'):
     # print(complete_packet.summary())
     return complete_packet
     
-def packet_assemble(dstv6, srcv6, mode, type = 'D'):
+def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
     global proto_list
     if mode != 'R' and mode != 'A' and mode != 'NDP':
         complete_packet = gen_packet(dstv6, srcv6, mode, type)
@@ -243,7 +276,7 @@ def packet_assemble(dstv6, srcv6, mode, type = 'D'):
     
     return complete_packet
 
-def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8, type = 'D'):
+def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8, type = 'DATA'):
     # TODO 自动获取源地址
     global source_address, mode
     # 将密文附着于 IPv6 目的地址后 64 位，依次发送
@@ -297,7 +330,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
 
-def send_message(message, type = 'D'):
+def send_message(message, type = 'DATA'):
     print(f"len_message: {len(message)}")
     plain_text = message
     if isinstance(message, str):
