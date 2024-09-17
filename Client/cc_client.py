@@ -36,15 +36,16 @@ from Common_Modules.timers import *
 from Common_Modules.ack_send import send_ack
 from Common_Modules.data_resend import resend_data
 from Common_Modules.set_flag import flag_set
-
+from Common_Modules.store_messages import update_receive_cache, store_receive_cache
+# 忽略所有警告
+warnings.filterwarnings("ignore")
 
 
 ack_event_timer = ResettableTimer(0.2, send_ack, receive_window)
 resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
+write_to_file_event_timer = ResettableTimer(2, store_receive_cache, receive_cache)
 
-
-# 忽略所有警告
-warnings.filterwarnings("ignore")
+receive_cache_lock = threading.Lock()
 
 
 def retransmit_cache_event(ack_num):
@@ -100,24 +101,26 @@ def packet_handler(packet):
                 # 收到的包在接收窗口内
                 # 在接收窗口中标记已接收
                 flag_set(receive_window, packet_seq_num, packet_type)
+                # TODO: 更新接收缓存，并且在合适的时候写入文件
+                update_receive_cache(receive_cache, plain_text.decode(), packet_seq_num, receive_cache_lock)
         
         # packet_seq_num = packet_seq(packet)
         # proto = packet_proto(packet)
-        if handle_packet(packet) == ACK_text:
-            print("ACK received")
-            send_packet_pause_event.clear()
-            retransmit_cache_event(packet_seq_num)
-            send_packet_pause_event.set()
-            return
-        if packet_seq_num == Ack.get_ack(proto):
-            Ack.ack_plus()
-            receive_cache.update(packet)
-        else:
-            send_message(ACK_text, type = 'A')
-            return
         
-        received_messages += plain_text
-        print(f"received_message_length: {len(received_messages)}")
+        # if handle_packet(packet) == ACK_text:
+        #     print("ACK received")
+        #     send_packet_pause_event.clear()
+        #     retransmit_cache_event(packet_seq_num)
+        #     send_packet_pause_event.set()
+        #     return
+        # if packet_seq_num == Ack.get_ack(proto):
+        #     Ack.ack_plus()
+        #     receive_cache.update(packet)
+        # else:
+        #     send_message(ACK_text, type = 'A')
+        #     return
+        # received_messages += plain_text
+        # print(f"received_message_length: {len(received_messages)}")
         if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
             print("FINISHED")
             received_messages = received_messages[:-8]

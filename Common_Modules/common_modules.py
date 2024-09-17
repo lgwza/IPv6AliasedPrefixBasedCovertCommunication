@@ -40,7 +40,7 @@ next_mode = {}
 received_messages = b""
 expected_seq = 0
 
-receive_cache = CACHE(10000)
+receive_cache = RECEIVE_CACHE(10000)
 send_cache = CACHE(10000)
 
 Ack = ACK()

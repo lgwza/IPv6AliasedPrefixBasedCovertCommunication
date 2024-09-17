@@ -1,10 +1,7 @@
 import sys
 import os
-# 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# 获取父目录
 parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
-# 将父目录添加到sys.path
 sys.path.insert(0, parent_dir)
 
 from typing import List, Tuple

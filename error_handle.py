@@ -1,5 +1,8 @@
 import random
 import queue
+from datetime import datetime, timezone, timedelta
+
+
 
 TCP_MAX = 2 ** 32 - 2
 ICMP_MAX = 2 ** 16 - 2
@@ -153,9 +156,6 @@ class SEND_WINDOW:
         self.right = (self.left + self.window_size - 1) % self.seq_max
         return True
     
-    
-        
-    
 class CACHE:
     # 队列缓存
     def __init__(self, size = 100):
@@ -164,6 +164,8 @@ class CACHE:
         self.head = 0
         self.tail = 0
         self.send_ptr = 0
+        self.seq_max = UDP_MAX
+        self.file_name = self.gen_file_name()
     
     def is_empty(self):
         return self.head == self.tail
@@ -221,8 +223,6 @@ class CACHE:
             return True
         return False
     
-        
-    
     def get_packet(self):
         if self.is_sendable():
             return self.cache[self.send_ptr]
@@ -265,7 +265,39 @@ class CACHE:
                 return True
             i = (i + 1) % self.size
         return False
-        
     
+    def gen_file_name(self):
+        # received_messages_ + 当前时间
+        now_utc = datetime.now()
+        east_8 = timezone(timedelta(hours = 8))
+        now_east_8 = now_utc.astimezone(east_8)
+        formatted_time = now_east_8.strftime("%Y%m%d%H%M%S")
+        self.file_name = 'Received_Messages/received_messages_' + formatted_time + '.txt'
+        return self.file_name
     
+    def get_file_name(self):
+        return self.file_name
+
+class RECEIVE_CACHE(CACHE):
+    def __init__(self, size = 100):
+        super().__init__(size)
+        self.cache = [(None, None)] * size
         
+    def add(self, text, seq):
+        if self.is_full():
+            return False
+        self.cache[self.tail] = (text, seq)
+        self.tail = (self.tail + 1) % self.size
+        return True
+    
+    def update(self, text, seq):
+        if self.is_full():
+            self.pop()
+        self.add(text, seq)
+        return True
+    
+    def write_to_pos(self, idx, text, seq):
+        assert(0 <= idx and idx < self.size)
+        assert(self.cache[idx] == (None, None))
+        self.cache[idx] = (text, seq)
+        return True
