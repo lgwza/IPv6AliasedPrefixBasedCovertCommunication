@@ -25,9 +25,9 @@ source_address = result_src
 source_mac = result_mac
 source_iface = result_dev
 src_dst_ip_set = {"2402:f000:6:1e00::232",
-                   "2401:c080:1000:4662:3eec:efff:feb9:8630"}
+                  "2401:c080:1000:4662:3eec:efff:feb9:8630"}
 # dst_address = list(src_dst_ip_set - {source_address})[0]
-dst_address = "2a09:7c41:0:15::1"
+dst_address = "2402:f000:6:1e00::232"
 # print(dst_address)
 
 # 该地址的源地址能否发送信息，目的地址能否接收信息
@@ -40,10 +40,23 @@ source_daddr_spoofable = spoofable_info[dst_address][1] # 源端目的地址可�
 dst_saddr_spoofable = spoofable_info[dst_address][0] # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
 dst_daddr_spoofable = spoofable_info[source_address][1] # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
+
+def gen_next_mode_dict():
+    global proto_list, next_mode
+    for i in range(len(proto_list)):
+        next_mode[proto_list[i]] = proto_list[(i + 1) % len(proto_list)]
+    next_mode[''] = proto_list[0]
+    # print(next_mode)
+    
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
 # proto_list = ['I', 'U', 'T', 'S', 'Raw']
 proto_list = ['U']
+last_mode = ''
+next_mode = {}
+gen_next_mode_dict()
+
+
 mode = 'A'
 if mode == 'NDP':
     source_saddr_spoofable = False
@@ -63,7 +76,7 @@ sleep_time = 0.025
 inter_time = 0.015
 
 # key = get_key()
-key = b"12345716"
+key = b"12345725"
 initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
 SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'

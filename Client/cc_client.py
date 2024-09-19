@@ -40,11 +40,6 @@ from Common_Modules.store_messages import update_receive_cache, store_receive_ca
 # 忽略所有警告
 warnings.filterwarnings("ignore")
 
-
-ack_event_timer = ResettableTimer(0.2, send_ack, receive_window)
-resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
-write_to_file_event_timer = ResettableTimer(2, store_receive_cache, receive_cache)
-
 receive_cache_lock = threading.Lock()
 
 
@@ -56,23 +51,25 @@ def retransmit_cache_event(ack_num):
     retransmit_seq_num = ack_num
     retransmit_flag = True
     
-    
-
-    
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler(packet):
     global status, source_address, dst_address, \
         received_messages, expected_seq
     # print(packet[IPv6].src, packet[IPv6].dst)
     # print(f"status: {status}")
-    if handle_packet(packet) == SYN_ACK_text and status == SYN_SENT:
+    plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
+    print(f"plain_text: {plain_text}")
+    print(f"packet_type: {packet_type}")
+    print(f"packet_seq_num: {packet_seq_num}")
+    print(f"proto: {proto}")
+    
+    if plain_text == SYN_ACK_text and status == SYN_SENT:
         print("ESTABLISHED")
         status = ESTABLISHED
         send_message(ACK_text)
         
-        receive_window.init_window(packet_seq(packet) + 1)
-        Ack.set_ack(packet_seq(packet) + 1)
-        receive_cache.update(packet)
+        receive_window.init_window(packet_seq_num + 1)
+        receive_cache.update(plain_text, packet_seq_num)
         
         send_handler = threading.Thread(target = send_input)
         send_handler.start()
@@ -96,7 +93,7 @@ def packet_handler(packet):
             resend_data(send_window, send_cache, packet_seq_num, packet_type)
         elif packet_type == 'DATA':
             if not receive_window.is_in_window(packet_seq_num):
-                send_ack()
+                send_ack(receive_window)
             else:
                 # 收到的包在接收窗口内
                 # 在接收窗口中标记已接收
@@ -121,14 +118,14 @@ def packet_handler(packet):
         #     return
         # received_messages += plain_text
         # print(f"received_message_length: {len(received_messages)}")
-        if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
-            print("FINISHED")
-            received_messages = received_messages[:-8]
-            save_to_file()
-            timer.end()
-            print("Timer stopped")
-            print("Time elapsed:", timer.get_time())
-            exit(0)
+        # if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
+        #     print("FINISHED")
+        #     received_messages = received_messages[:-8]
+        #     save_to_file()
+        #     timer.end()
+        #     print("Timer stopped")
+        #     print("Time elapsed:", timer.get_time())
+        #     exit(0)
         
     
     

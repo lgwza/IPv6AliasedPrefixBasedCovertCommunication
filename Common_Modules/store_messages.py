@@ -5,7 +5,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 sys.path.insert(0, parent_dir)
 from error_handle import RECEIVE_CACHE
-from common_modules import packet_seq
+# from common_modules import packet_seq, write_to_file_event_timer
 import threading
 
 # 将明文信息写入接收缓存中特定的位置
@@ -14,27 +14,33 @@ def update_receive_cache(receive_cache : RECEIVE_CACHE, \
                          plain_text : str, \
                          packet_seq_num : int, \
                          receive_cache_lock : threading.Lock) -> RECEIVE_CACHE:
-    if receive_cache.is_empty():
-        with receive_cache_lock:
-            receive_cache.update(plain_text, packet_seq_num)
-        return receive_cache
-    head_seq_num = receive_cache.cache[receive_cache.head][1]
-    target_idx = ((packet_seq_num - head_seq_num + receive_cache.seq_max) % receive_cache.seq_max + receive_cache.head) % receive_cache.size
     with receive_cache_lock:
+        if receive_cache.is_empty():
+            with receive_cache_lock:
+                receive_cache.update(plain_text, packet_seq_num)
+            return receive_cache
+        head_seq_num = receive_cache.cache[receive_cache.head][1]
+        target_idx = ((packet_seq_num - head_seq_num + receive_cache.seq_max) % receive_cache.seq_max + receive_cache.head) % receive_cache.size
         receive_cache.write_to_pos(target_idx, plain_text, packet_seq_num)
     return receive_cache
 
-def store_receive_cache(receive_cache : RECEIVE_CACHE) -> None:
+def store_receive_cache(receive_cache : RECEIVE_CACHE, \
+                        receive_cache_lock : threading.Lock) -> None:
     # 将接受缓存中的数据写入文件，直到遇到 None
     # 从 head 到 tail
     written_text = ''
-    while receive_cache.cache[receive_cache.head][0] != None and receive_cache.head != receive_cache.tail:
-        written_text += receive_cache.cache[receive_cache.head][0]
-        receive_cache.cache[receive_cache.head] = (None, None)
-        receive_cache.head = (receive_cache.head + 1) % receive_cache.size 
+    with receive_cache_lock:
+        print(f"receive_cache: {receive_cache.cache[receive_cache.head : receive_cache.head + 5]}")
+        while receive_cache.cache[receive_cache.head][0] != None and receive_cache.head != receive_cache.tail:
+            written_text += receive_cache.cache[receive_cache.head][0]
+            receive_cache.cache[receive_cache.head] = (None, None)
+            receive_cache.head = (receive_cache.head + 1) % receive_cache.size
+    print(f"written_text: {written_text}")
     if written_text != '':
         with open(receive_cache.get_file_name(), 'a') as f:
             f.write(written_text)
+    
+    # write_to_file_event_timer.reset()
     return
 
         

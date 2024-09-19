@@ -6,12 +6,12 @@ sys.path.insert(0, parent_dir)
 
 from typing import List, Tuple
 from error_handle import SEND_WINDOW, CACHE
-from common_modules import packet_seq
+
 from config import inter_time
 from scapy.all import send
 
 # 返回发送窗口中尚未被确认的数据包的序列号区间
-def seq_num_gen(send_window : SEND_WINDOW) -> list[Tuple[int, int]]:
+def seq_num_gen(send_window : SEND_WINDOW) -> List[Tuple[int, int]]:
     
     seq_num_list = []
     window_left = send_window.left
@@ -35,6 +35,7 @@ def seq_num_gen(send_window : SEND_WINDOW) -> list[Tuple[int, int]]:
 
 # 将发送窗口中未被确认的数据包重新发送
 def resend_data(send_window : SEND_WINDOW, send_cache : CACHE):
+    from common_modules import packet_seq
     seq_num_list = seq_num_gen(send_window) # [(int, int), (int, int), ...]
     first_packet_seq_num = seq_num_list[0][0]
     # 在 send_cache 中找到第一个需要重传的数据包

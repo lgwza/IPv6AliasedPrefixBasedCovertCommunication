@@ -26,6 +26,10 @@ from datetime import datetime, timedelta, timezone
 
 from config import *
 from error_handle import *
+from timers import ResettableTimer
+from store_messages import store_receive_cache
+from Common_Modules.ack_send import send_ack
+from Common_Modules.data_resend import resend_data
 
 # 忽略所有警告
 warnings.filterwarnings("ignore")
@@ -34,9 +38,8 @@ timer = Timer()
 
 status = CLOSED
 
-last_mode = ''
-next_mode = {}
-
+print("调用 common_modules.py")
+print("in common_modules.py, next_mode: ", next_mode)
 received_messages = b""
 expected_seq = 0
 
@@ -56,12 +59,19 @@ retransmit_flag = False
 retransmit_seq_num = -1
 
 
+receive_cache_lock = threading.Lock()
+
+ack_event_timer = ResettableTimer(0.2, send_ack, receive_window)
+resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
+write_to_file_event_timer = ResettableTimer(2, store_receive_cache, receive_cache, receive_cache_lock)
+
+
 def gen_next_mode_dict():
     global proto_list, next_mode
     for i in range(len(proto_list)):
         next_mode[proto_list[i]] = proto_list[(i + 1) % len(proto_list)]
     next_mode[''] = proto_list[0]
-
+    # print(next_mode)s
     
 def save_to_file():
     global received_messages
@@ -165,7 +175,6 @@ def handle_packet(packet):
     # 处理 'DATA' 类型的包
     packet_seq_num = packet_seq(packet)
     
-    
     return all_plain_text, 'DATA', packet_seq_num, proto
 
 def packet_seq(packet):
@@ -258,7 +267,10 @@ def gen_packet(dstv6, srcv6, proto, type = 'DATA'):
     return complete_packet
     
 def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
-    global proto_list
+    global proto_list, last_mode, next_mode
+    # print("in packet_assemble")
+    # print(f"last_mode: {last_mode}")
+    # print(f"next_mode: {next_mode}")
     if mode != 'R' and mode != 'A' and mode != 'NDP':
         complete_packet = gen_packet(dstv6, srcv6, mode, type)
     elif mode == 'R': # random mode
@@ -266,7 +278,7 @@ def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
         # print(mode)
         complete_packet = gen_packet(dstv6, srcv6, mode, type)
     elif mode == 'A' or mode == 'NDP': # Alternate mode
-        global last_mode, next_mode
+        
         now_mode = next_mode[last_mode]
         last_mode = now_mode
         complete_packet = gen_packet(dstv6, srcv6, now_mode, type)
@@ -366,4 +378,6 @@ def send_message(message, type = 'DATA'):
     # print(encrypted_blocks_hex)
     # print(dstv6_prefix)
     print(f"len_plain_text: {len(plain_text)}")
+    print(f"plain_text: {plain_text}")
     send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size, type)
+    

@@ -1,4 +1,4 @@
-from common_modules import send_message
+
 from config import NEW_ACK_text, SACK_text
 import sys
 import os
@@ -8,6 +8,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 # 将父目录添加到sys.path
 sys.path.insert(0, parent_dir)
+from error_handle import RECEIVE_WINDOW
 
 # 将接收/发送窗口内相应的包序列号标记为已接收/被确认
 def flag_set(window, packet_seq_num, packet_type = 'ACK'):
@@ -66,8 +67,10 @@ def ack_num_gen(window_left : int,
     # ACK: 9, SACK: [(10, 10), (12, 1), (3, 3)]
     return ack_num, sack_list
 
-def send_ack(receive_window):
-    window_left = receive_window.left 
+def send_ack(receive_window : RECEIVE_WINDOW):
+    from common_modules import send_message
+    print("enter send_ack")
+    window_left = receive_window.left
     window_right = receive_window.right
     ack_max = receive_window.ack_max
     window_size = receive_window.window_size
@@ -96,8 +99,8 @@ def send_ack(receive_window):
     move_step = (ack_num - window_left + ack_max) % ack_max
     receive_window.move_right(move_step)
     
-    from Client.cc_client import ack_event_timer
-    ack_event_timer.reset()
+    # from Client.cc_client import ack_event_timer
+    # ack_event_timer.reset()
     
     return receive_window
     

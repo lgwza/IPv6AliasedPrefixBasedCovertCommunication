@@ -23,6 +23,11 @@ sys.path.insert(0, os.path.join(parent_dir, "Common_Modules"))
 from config import *
 from error_handle import *
 from Common_Modules.common_modules import *
+from Common_Modules.timers import *
+from Common_Modules.ack_send import send_ack
+from Common_Modules.data_resend import resend_data
+from Common_Modules.set_flag import flag_set
+from Common_Modules.store_messages import update_receive_cache, store_receive_cache
     
 def retransmit_cache(ack_num):
     global send_cache
@@ -39,19 +44,22 @@ def retransmit_cache(ack_num):
 def packet_handler(packet):
     global status, source_address, dst_address, \
         received_messages, expected_seq
-    print("Source IPv6 address: ", packet[IPv6].src)
-    print("status: ", status)
-    if handle_packet(packet) == SYN_text and status == LISTEN:
+    # print("Source IPv6 address: ", packet[IPv6].src)
+    # print("status: ", status)
+    plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
+    print(f"plain_text: {plain_text}")
+    print(f"packet_type: {packet_type}")
+    print(f"packet_seq_num: {packet_seq_num}")
+    print(f"proto: {proto}")
+    if plain_text == SYN_text and status == LISTEN:
         print("SYN_RECEIVED")
         status = SYN_RECEIVED
         # 发送 SYN_ACK
         # print(packet[IPv6].src)
         # print("dst_address: ", dst_address)
         send_message(SYN_ACK_text)
-        Ack.set_ack(packet_seq(packet) + 1)
-        receive_cache.update(packet)
-
-    elif handle_packet(packet) == ACK_text and status == SYN_RECEIVED:
+        # receive_cache.update(plain_text, packet_seq_num)
+    elif plain_text == ACK_text and status == SYN_RECEIVED:
         print("ESTABLISHED")
         # TODO 需要更严谨的逻辑
         status = ESTABLISHED
@@ -59,37 +67,46 @@ def packet_handler(packet):
         send_handler.start()
         timer.start()
         print("Timer started")
-        Ack.ack_plus()
-        receive_cache.update(packet)
+
+        # receive_cache.update(plain_text, packet_seq_num)
+        receive_window.init_window(packet_seq_num + 1)
+        ack_event_timer.start()
+        write_to_file_event_timer.start()
     elif status == ESTABLISHED:
-        packet_seq_num = packet_seq(packet)
-        proto = packet_proto(packet)
-        plain_text = handle_packet(packet)
-        print("received message:", plain_text.decode('latin-1'))
-        print(packet_seq_num, Ack.get_ack(proto), proto)
-        if handle_packet(packet) == ACK_text:
-            send_packet_pause_event.clear()
-            retransmit_cache(packet_seq_num)
-            send_packet_pause_event.set()
-            return
-        if packet_seq_num == Ack.get_ack(proto):
-            Ack.ack_plus()
-            receive_cache.update(packet)
-        else:
-            
-            send_message(ACK_text, type = 'A')
-            return
+        ack_event_timer.reset() # 收到包后计时重置
+        # print(f"plain_text: {plain_text}")
+        # print(f"packet_type: {packet_type}")
+        # print(f"packet_seq_num: {packet_seq_num}")
+        # print(f"proto: {proto}")
+        # print(packet_seq_num, receive_window.left, \
+        #       receive_window.right, proto)
+        if packet_type == 'ACK' or packet_type == 'SACK':
+            resend_data_event_timer.reset()
+            # 对端已接收，需要在发送窗口中标记对端已接收
+            flag_set(send_window, packet_seq_num, packet_type)
+            resend_data(send_window, send_cache, packet_seq_num, packet_type)
+        elif packet_type == 'DATA':
+            if not receive_window.is_in_window(packet_seq_num):
+                send_ack(receive_window)
+            else:
+                # 收到的包在接收窗口内
+                # 在接收窗口中标记已接收
+                flag_set(receive_window, packet_seq_num, packet_type)
+                # TODO: 更新接收缓存，并且在合适的时候写入文件
+                update_receive_cache(receive_cache, plain_text.decode(), packet_seq_num, receive_cache_lock)
+
         
-        received_messages += plain_text # 字节串
-        print(f"received_message_length: {len(received_messages)}")
-        if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
-            print("FINISHED")
-            received_messages = received_messages[:-8]
-            save_to_file()
-            timer.end()
-            print("Timer stopped")
-            print("Time elapsed:", timer.get_time())
-            exit(0)
+        
+        # received_messages += plain_text # 字节串
+        # print(f"received_message_length: {len(received_messages)}")
+        # if len(received_messages) >= 8 and received_messages[-8 :] == RST_text:
+        #     print("FINISHED")
+        #     received_messages = received_messages[:-8]
+        #     save_to_file()
+        #     timer.end()
+        #     print("Timer stopped")
+        #     print("Time elapsed:", timer.get_time())
+        #     exit(0)
 
 def cache_send():
     global retransmit_flag, retransmit_seq_num
@@ -117,6 +134,8 @@ def send_input():
 if __name__ == "__main__":
     status = LISTEN
     gen_next_mode_dict()
+    # print('main')
+    # print(next_mode)
     # subprocess.Popen(["python3", "ND_NA.py"])
     listen_handler = threading.Thread(target = receive_message,
                                       args = (sys.modules[__name__],))

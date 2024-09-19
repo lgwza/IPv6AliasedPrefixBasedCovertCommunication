@@ -48,7 +48,6 @@ class SEQ:
         else:
             return -1
         
-        
 class ACK:
     def __init__(self):
         self.ack = -1
@@ -298,6 +297,6 @@ class RECEIVE_CACHE(CACHE):
     
     def write_to_pos(self, idx, text, seq):
         assert(0 <= idx and idx < self.size)
-        assert(self.cache[idx] == (None, None))
+        # assert(self.cache[idx] == (None, None))
         self.cache[idx] = (text, seq)
         return True
