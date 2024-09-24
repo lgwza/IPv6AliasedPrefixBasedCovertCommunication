@@ -31,7 +31,7 @@ dst_address = "2402:f000:6:1e00::232"
 # print(dst_address)
 
 # 该地址的源地址能否发送信息，目的地址能否接收信息
-spoofable_info = {"2402:f000:6:1e00::232": [False, True],
+spoofable_info = {"2402:f000:6:1e00::232": [False, False],
                   "2401:c080:1000:4662:3eec:efff:feb9:8630": [True, True],
                   "2a09:7c41:0:15::1": [False, False]}
 
@@ -76,7 +76,7 @@ sleep_time = 0.025
 inter_time = 0.015
 
 # key = get_key()
-key = b"12345725"
+key = b"12345727"
 initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
 SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'

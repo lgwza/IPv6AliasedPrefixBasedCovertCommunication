@@ -5,15 +5,15 @@ parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 sys.path.insert(0, parent_dir)
 
 from typing import List, Tuple
-from error_handle import SEND_WINDOW, CACHE
+from Common_Modules.error_handle import SEND_WINDOW, CACHE, WINDOW
 
 from config import inter_time
 from scapy.all import send
 
-# 返回发送窗口中尚未被确认的数据包的序列号区间
-def seq_num_gen(send_window : SEND_WINDOW) -> List[Tuple[int, int]]:
+# 返回发送窗口中尚未被确认的数据包的序列号闭区间
+def seq_num_gen(send_window : WINDOW) -> List[Tuple[int, int]]:
     
-    seq_num_list = []
+    seq_num_section_list = []
     window_left = send_window.left
     nowLeft = -1
     for i in range(send_window.window_size):
@@ -23,24 +23,29 @@ def seq_num_gen(send_window : SEND_WINDOW) -> List[Tuple[int, int]]:
             nowLeft = (window_left + i) % send_window.seq_max
             continue
         if send_window.window[i] == True and nowLeft != -1:
-            seq_num_list.append((nowLeft, (window_left + i - 1 + send_window.seq_max) % send_window.seq_max))
+            seq_num_section_list.append((nowLeft, (window_left + i - 1 + send_window.seq_max) % send_window.seq_max))
             nowLeft = -1
         
     if nowLeft != -1:
-        seq_num_list.append((nowLeft, (window_left + send_window.window_size - 1 + send_window.seq_max) % send_window.seq_max))
+        seq_num_section_list.append((nowLeft, (window_left + send_window.window_size - 1 + send_window.seq_max) % send_window.seq_max))
     
-    return seq_num_list
+    return seq_num_section_list
     
 
 
 # 将发送窗口中未被确认的数据包重新发送
 def resend_data(send_window : SEND_WINDOW, send_cache : CACHE):
+    print("ENTER RESEND_DATA")
     from common_modules import packet_seq
-    seq_num_list = seq_num_gen(send_window) # [(int, int), (int, int), ...]
-    first_packet_seq_num = seq_num_list[0][0]
+    seq_num_section_list = seq_num_gen(send_window) # [(int, int), (int, int), ...]，每个元组表示一个序列号区间，区间内的数据包需要重传
+    if len(seq_num_section_list) == 0:
+        print("NO DATA TO SEND")
+        return
+    first_packet_seq_num = seq_num_section_list[0][0]
     # 在 send_cache 中找到第一个需要重传的数据包
     cache_list = send_cache.iter()
     first_idx = -1
+    print(f"seq_num_section_list: {seq_num_section_list}")
     for i in range(len(cache_list)):
         if packet_seq(cache_list[i]) == first_packet_seq_num:
             first_idx = i
@@ -52,22 +57,18 @@ def resend_data(send_window : SEND_WINDOW, send_cache : CACHE):
     resend_list = []
     left_idx = -1
     right_idx = -1
-    for seq_pair in seq_num_list:
+    for seq_pair in seq_num_section_list:
         left_seq_num = seq_pair[0]
         right_seq_num = seq_pair[1]
         left_idx = first_idx + (left_seq_num - first_packet_seq_num + send_window.seq_max) % send_window.seq_max
         right_idx = first_idx + (right_seq_num - first_packet_seq_num + send_window.seq_max) % send_window.seq_max
-        
+        right_idx = min(right_idx, len(cache_list) - 1)
         assert(left_seq_num == packet_seq(cache_list[left_idx]) and right_seq_num == packet_seq(cache_list[right_idx]))
         
         resend_list += cache_list[left_idx : right_idx + 1]
-    
+    print(f"RESENDING LIST: {resend_list}")
     # 重传 resend_list 中的数据包
     send(resend_list, inter = inter_time)
-    
-    
-    
-    
         
 def test():
     send_window = SEND_WINDOW(10)

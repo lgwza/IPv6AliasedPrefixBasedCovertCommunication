@@ -1,7 +1,8 @@
 import random
 import queue
 from datetime import datetime, timezone, timedelta
-
+from typing import List, Tuple, Union
+from config import NEW_ACK_text, SACK_text
 
 
 TCP_MAX = 2 ** 32 - 2
@@ -84,76 +85,155 @@ class ACK:
         else:
             return -1
         
-class RECEIVE_WINDOW:
-    def __init__(self, window_size = 1000):
-        self.window_size = window_size
-        self.window = [False] * window_size
-        self.left = 0 # 序列号区间左端点
-        self.right = 0 # 序列号区间右端点
-        self.ack_max = UDP_MAX
-    
-    def add_window_size(self, size):
-        self.window_size += size
-        self.window += [False] * size
-        return True
-    
-    def minus_window_size(self, size):
-        self.window_size -= size
-        self.window = self.window[: -size]
-        return True
-    
-    def init_window(self, left):
-        self.left = left
-        self.right = (self.left + self.window_size - 1) % self.ack_max
-        return True
-    
-    def is_in_window(self, seq):
-        if self.left <= seq and seq <= self.right:
-            return True
-        if self.right < self.left and (self.left <= seq or seq <= self.right):
-            return True
-        return False
-    
-    def move_right(self, step):
-        self.left = (self.left + step) % self.ack_max
-        self.right = (self.right + step) % self.ack_max
         
-        que = queue.Queue()
-        
-        for i in range(len(self.window)):
-            que.put(self.window[i])
-        # 移动 window
-        for i in range(step):
-            que.get()
-            que.put(False)
-        for i in range(len(self.window)):
-            self.window[i] = que.get()
-        
-        return True
-    
-    
-class SEND_WINDOW:
-    def __init__(self, window_size = 1000):
-        self.window_size = window_size
-        self.window = [False] * window_size # 是否收到确认
+class WINDOW:
+    def __init__(self, max_window_size : int = 1000):
+        self.max_window_size = max_window_size
+        self.window_size = 0
+        self.window = []
+        # [left, right)
         self.left = 0
         self.right = 0
         self.seq_max = UDP_MAX
-        
-    def add_window_size(self, size):
-        self.window_size += size
-        self.window += [False] * size
-        return True
     
-    def minus_window_size(self, size):
-        self.window_size -= size
-        self.window = self.window[: -size]
-        return True
-    
-    def init_window(self, left):
+    def init_window(self, left : int, window_size : int) -> bool:
         self.left = left
-        self.right = (self.left + self.window_size - 1) % self.seq_max
+        self.window_size = window_size
+        self.right = (self.left + self.window_size) % self.seq_max
+        self.window = [False] * window_size
         return True
+        
+    def is_in_window(self, seq : int) -> bool:
+        if self.left <= seq and seq < self.right:
+            return True
+        if self.right < self.left and (self.left <= seq or seq < self.right):
+            return True
+        return False
+        
+    # 右边界右移
+    def open(self, delta_size : int) -> bool:
+        if self.window_size + delta_size > self.max_window_size:
+            print("WARNING: WINDOW SIZE EXCEEDS MAXIMUM")
+            return False
+        self.window_size += delta_size
+        self.right = (self.left + self.window_size) % self.seq_max
+        self.window += [False] * delta_size
+        return True
+    
+    # 左边界右移
+    def close(self, delta_size : int) -> bool:
+        if self.window_size - delta_size < 0:
+            print("WARNING: WINDOW SIZE LESS THAN ZERO")
+            return False
+        self.window_size -= delta_size
+        self.left = (self.left + delta_size) % self.seq_max
+        self.window = self.window[delta_size :]
+        return True
+    
+    # 右边界左移
+    def shrink(self, delta_size : int) -> bool:
+        if self.window_size - delta_size < 0:
+            print("WARNING: WINDOW SIZE LESS THAN ZERO")
+            return False
+        self.window_size -= delta_size
+        self.window = self.window[: -delta_size]
+        self.right = (self.left + self.window_size) % self.seq_max
+        return True
+        
+    def is_empty(self):
+        return self.window_size == 0
+    
+    def extend_to_seq(self, seq : int) -> bool:
+        if self.is_in_window(seq):
+            print("WARNING: UNABLE TO EXTEND")
+            print(f"SEQ {seq} IN WINDOW [{self.left}, {self.right})")
+            return False
+        extend_len = (seq - self.right + 1 + self.seq_max) % self.seq_max
+        self.open(extend_len)
+        return True
+    
+    def flag_set(self, packet_seq_num : Union[int, List[Tuple[int, int]]], \
+                 packet_type : str) -> bool:
+        # packet_seq_num, ACK: int, SACK: [(int, int), (int, int)], DATA: int
+        # 对于 ACK，标记发送窗口中 [left, ACK) 已确认
+        if packet_type == 'ACK':
+            if not self.is_in_window(packet_seq_num):
+                print("WARNING: ACK NUMBER OUT OF WINDOW")
+                return False
+            winRight = (packet_seq_num - self.left + self.seq_max) % self.seq_max
+            self.window[:winRight] = [True] * winRight
+            return True
+        # 对于 SACK，标记发送窗口中 [sack_left, sack_right] 已确认
+        elif packet_type == 'SACK':
+            for sack in packet_seq_num:
+                sack_left = sack[0]
+                sack_right = sack[1]
+                if not self.is_in_window(sack_left) or not self.is_in_window(sack_right):
+                    print("WARNING: SACK SECTION OUT OF WINDOW")
+                    return False
+                    
+                winLeft = (sack[0] - self.left + self.seq_max) % self.seq_max
+                winRight = (sack[1] - self.left + self.seq_max) % self.seq_max
+                self.window[winLeft : winRight + 1] = [True] * (winRight - winLeft + 1)
+        # 对于 DATA，标记接收窗口
+        elif packet_type == 'DATA':
+            if not self.is_in_window(packet_seq_num):
+                print("WARNING: DATA NUMBER OUT OF WINDOW")
+                return False
+            winPos = (packet_seq_num - self.left + self.seq_max) % self.seq_max
+            self.window[winPos] = True
+        return True
+    
+class RECEIVE_WINDOW(WINDOW):
+    def __init__(self, max_window_size : int = 1000):
+        super().__init__(max_window_size)
+    
+    def ack_num_gen(self):
+        ack_num = None
+        sack_list = []
+        sack_left = None
+        for i in range(self.window_size):
+            if self.window[i] == False and ack_num == None:
+                ack_num = (self.left + i) % self.seq_max
+                continue
+            if ack_num != None and self.window[i] == True:
+                if sack_left == None:
+                    sack_left = (self.left + i) % self.seq_max
+                continue
+            if sack_left != None and self.window[i] == False:
+                sack_list.append((sack_left, (self.left + i - 1) % self.seq_max))
+                sack_left = None
+        if sack_left != None:
+            sack_list.append((sack_left, (self.right - 1) % self.seq_max))
+        if sack_left == None and ack_num == None:
+            ack_num = (self.right) % self.seq_max
+        
+        print("ACK NUM GENERATED")
+        print(f"ACK: {ack_num}, SACK: {sack_list}")
+        
+        return ack_num, sack_list
+    
+    def send_ack(self):
+        from common_modules import send_message
+        print("ENTER SEND ACK")
+        ack_num, sack_list = self.ack_num_gen()
+        
+        if ack_num != None:
+            message = NEW_ACK_text + ack_num.to_bytes(2, 'big')
+            send_message(message, type = 'ACK', send_directly = True)
+        
+        if sack_list != []:
+            messages = b''
+            for sack in sack_list:
+                message = SACK_text + sack[0].to_bytes(2, 'big') + sack[1].to_bytes(2, 'big')
+                messages += message
+            send_message(messages, type = 'SACK', send_directly = True)
+        return True
+    
+    
+class SEND_WINDOW(WINDOW):
+    def __init__(self, max_window_size : int = 1000):
+        super().__init__(max_window_size)
     
 class CACHE:
     # 队列缓存

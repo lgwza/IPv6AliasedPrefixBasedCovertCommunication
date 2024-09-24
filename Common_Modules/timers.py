@@ -17,7 +17,7 @@ class ResettableTimer:
         self._stop_event = threading.Event()  # 用于停止线程
         self._reset_event = threading.Event()  # 用于重置计时器
         self._thread = threading.Thread(target=self._run_timer)
-        self._thread.daemon = True  # 让线程在主线程退出时自动结束
+        self._thread.daemon = False  # 让线程在主线程退出时自动结束
         self._is_running = False
         self.start_time = None  # 用于记录开始时间
 
@@ -75,15 +75,17 @@ if __name__ == '__main__':
     # 启动计时器
     resettable_timer.start()
 
+
+    # time.sleep(20)
     # 模拟事件发生，每次事件发生重置计时器
-    time.sleep(2)
-    print(f"Elapsed time: {resettable_timer.get_elapsed_time():.2f} seconds")  # 获取当前计时的时间
-    resettable_timer.reset()  # 第一次重置
+    # time.sleep(2)
+    # print(f"Elapsed time: {resettable_timer.get_elapsed_time():.2f} seconds")  # 获取当前计时的时间
+    # resettable_timer.reset()  # 第一次重置
 
-    time.sleep(3)
-    print(f"Elapsed time: {resettable_timer.get_elapsed_time():.2f} seconds")  # 获取当前计时的时间
-    resettable_timer.reset()  # 第二次重置
+    # time.sleep(3)
+    # print(f"Elapsed time: {resettable_timer.get_elapsed_time():.2f} seconds")  # 获取当前计时的时间
+    # resettable_timer.reset()  # 第二次重置
 
-    time.sleep(6)  # 超过计时器时间间隔，不再重置
-    print(f"Elapsed time: {resettable_timer.get_elapsed_time():.2f} seconds")  # 获取当前计时的时间
-    resettable_timer.stop()
+    # time.sleep(6)  # 超过计时器时间间隔，不再重置
+    # print(f"Elapsed time: {resettable_timer.get_elapsed_time():.2f} seconds")  # 获取当前计时的时间
+    # resettable_timer.stop()

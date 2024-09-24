@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 
 
 from config import *
-from error_handle import *
+from Common_Modules.error_handle import *
 from timers import ResettableTimer
 from store_messages import store_receive_cache
 from Common_Modules.ack_send import send_ack
@@ -49,8 +49,10 @@ send_cache = CACHE(10000)
 Ack = ACK()
 Seq = SEQ()
 
-receive_window = RECEIVE_WINDOW(5000)
-send_window = SEND_WINDOW(5000)
+receive_window = RECEIVE_WINDOW(max_window_size = 5000)
+send_window = SEND_WINDOW(max_window_size = 5000)
+
+# send_window.init_window(Seq.get_seq('U')) # TODO: 一定是 UDP 吗？
 
 send_packet_pause_event = threading.Event()
 send_packet_pause_event.set()
@@ -60,6 +62,7 @@ retransmit_seq_num = -1
 
 
 receive_cache_lock = threading.Lock()
+send_cache_lock = threading.Lock()
 
 ack_event_timer = ResettableTimer(0.2, send_ack, receive_window)
 resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
@@ -71,7 +74,7 @@ def gen_next_mode_dict():
     for i in range(len(proto_list)):
         next_mode[proto_list[i]] = proto_list[(i + 1) % len(proto_list)]
     next_mode[''] = proto_list[0]
-    # print(next_mode)s
+    # print(next_mode)
     
 def save_to_file():
     global received_messages
@@ -235,10 +238,17 @@ def receive_message(caller_module):
 # proto: I ICMPv6, T TCP, U UDP, S SCTP, Raw Raw
 # type: D Data, A ACK
 def gen_packet(dstv6, srcv6, proto, type = 'DATA'):
+    now_seq = random.randint(1, UDP_MAX)
     if type == 'DATA':
         now_seq = Seq.get_seq(proto)
-    elif type == 'A':
-        now_seq = Ack.get_ack(proto)
+    elif type == 'INFO':
+        now_seq = random.randint(1, UDP_MAX)
+    elif type == 'ACK':
+        # 随机
+        now_seq = random.randint(1, UDP_MAX)
+    elif type == 'SACK':
+        # 随机
+        now_seq = random.randint(1, UDP_MAX)
     ipv6_layer = IPv6(src = srcv6, dst = dstv6)
     if proto == 'I':
         complete_packet = ipv6_layer / \
@@ -278,7 +288,6 @@ def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
         # print(mode)
         complete_packet = gen_packet(dstv6, srcv6, mode, type)
     elif mode == 'A' or mode == 'NDP': # Alternate mode
-        
         now_mode = next_mode[last_mode]
         last_mode = now_mode
         complete_packet = gen_packet(dstv6, srcv6, now_mode, type)
@@ -288,8 +297,9 @@ def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
     
     return complete_packet
 
-def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, block_size = 8, type = 'DATA'):
-    # TODO 自动获取源地址
+def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
+                srcv6_prefix = None, block_size = 8, \
+                type = 'DATA', send_directly = False):
     global source_address, mode
     # 将密文附着于 IPv6 目的地址后 64 位，依次发送
     # 一个 block 是 8 字节，每个 block 转换为 16 进制字符串后长度为 16
@@ -297,8 +307,6 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
     if (dstv6_prefix != None and srcv6_prefix == None) or \
         (dstv6_prefix == None and srcv6_prefix != None):
         for i in range(len(encrypted_blocks_hex)):
-            print(f"i = {i}, len = {len(encrypted_blocks_hex)}")
-            # 添加 ':'
             dstv6 = dstv6_prefix
             srcv6 = srcv6_prefix
             if dstv6_prefix != None and srcv6_prefix == None:
@@ -310,16 +318,19 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
                     srcv6 = srcv6 + ":" + encrypted_blocks_hex[i][j : j + 4]
                 dstv6 = dst_address
             complete_packet = packet_assemble(dstv6, srcv6, mode, type)
-            # send(complete_packet)
-            
-            send_packet_pause_event.wait()
-            print("!!!", complete_packet.summary())
-            while not send_cache.is_updatable():
-                print("not updatable")
-                # time.sleep(sleep_time)
-            Seq.seq_plus()
-            send_cache.update(complete_packet)
-            # time.sleep(sleep_time)
+            if not send_directly:
+                send_packet_pause_event.wait()
+                while not send_cache.is_updatable():
+                    print("not updatable")
+                    # time.sleep(sleep_time)
+                print("WRITE SEND CACHE", complete_packet.summary())
+                send_cache.update(complete_packet)
+                # 尝试将发送窗口右边界右移
+                # TODO: 一定是 UDP 吗？
+                send_window.extend_to_seq(Seq.get_seq('U'))
+                Seq.seq_plus()
+            else:
+                send(complete_packet)
     elif dstv6_prefix != None and srcv6_prefix != None:
         for i in range(0, len(encrypted_blocks_hex), 2):
             dstv6 = dstv6_prefix
@@ -329,21 +340,26 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, srcv6_prefix = None, 
             for j in range(0, len(encrypted_blocks_hex[i + 1]), 4):
                 srcv6 = srcv6 + ":" + encrypted_blocks_hex[i + 1][j : j + 4]
             complete_packet = packet_assemble(dstv6, srcv6, mode, type)
-            # send(complete_packet)
-            
-            send_packet_pause_event.wait()
-            print("!!!", complete_packet.summary())
-            while not send_cache.is_updatable():
-                time.sleep(sleep_time)
-            Seq.seq_plus()
-            send_cache.update(complete_packet)
-            time.sleep(sleep_time)
+            if not send_directly:
+                send_packet_pause_event.wait()
+                while not send_cache.is_updatable():
+                    print("not updatable")
+                    # time.sleep(sleep_time)
+                print("WRITE SEND CACHE", complete_packet.summary())
+                send_cache.update(complete_packet)
+                # 尝试将发送窗口右边界右移
+                # TODO: 一定是 UDP 吗？
+                send_window.extend_to_seq(Seq.get_seq('U'))
+                Seq.seq_plus()
+            else:
+                send(complete_packet)
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
+    
+    
 
-def send_message(message, type = 'DATA'):
-    print(f"len_message: {len(message)}")
+def send_message(message, type = 'DATA', send_directly = False):
     plain_text = message
     if isinstance(message, str):
         plain_text = message.encode()
@@ -372,12 +388,11 @@ def send_message(message, type = 'DATA'):
         len(plain_text) // block_size % 2 != 0:
         plain_text = pad(plain_text, block_size)
     plaintext_blocks = [plain_text[i : i + block_size] for i in range(0, len(plain_text), block_size)]
-    # print(plaintext_blocks)
     encrypted_blocks = cast_encrypt_blocks(key, plaintext_blocks)
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
-    # print(encrypted_blocks_hex)
-    # print(dstv6_prefix)
-    print(f"len_plain_text: {len(plain_text)}")
-    print(f"plain_text: {plain_text}")
-    send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size, type)
+    if not send_directly:
+        print(f"READY TO WRITE PLAIN TEXT {plain_text} TO SEND CACHE")
+    else:
+        print(f"READY TO SEND PLAIN TEXT {plain_text}")
+    send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size, type, send_directly)
     

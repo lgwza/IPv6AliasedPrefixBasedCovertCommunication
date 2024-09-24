@@ -8,28 +8,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 # 将父目录添加到sys.path
 sys.path.insert(0, parent_dir)
-from error_handle import RECEIVE_WINDOW
-
-# 将接收/发送窗口内相应的包序列号标记为已接收/被确认
-def flag_set(window, packet_seq_num, packet_type = 'ACK'):
-    # packet_seq_num, ACK: int, SACK: [(int, int), (int, int)], DATA: int
-    
-    if packet_type == 'ACK': # 标记发送窗口
-        winRight = (packet_seq_num - window.left + window.ack_max) % window.ack_max
-        window.window[:winRight] = [True] * winRight
-    elif packet_type == 'SACK': # 标记发送窗口
-        for sack in packet_seq_num:
-            sack_left = sack[0]
-            sack_right = sack[1]
-            winLeft = (sack[0] - window.left + window.ack_max) % window.ack_max
-            winRight = (sack[1] - window.left + window.ack_max) % window.ack_max
-            window.window[winLeft : winRight + 1] = [True] * (winRight - winLeft + 1)
-    elif packet_type == 'DATA': # 标记接收窗口
-        winPos = (packet_seq_num - window.left + window.ack_max) % window.ack_max
-        window.window[winPos] = True
-        
-    return window
-
+from Common_Modules.error_handle import RECEIVE_WINDOW, WINDOW
+from typing import List, Tuple, Union
 
 # 对接收窗口内已标记接收的子区间发送 (S)ACK
 def ack_num_gen(window_left : int,
@@ -37,7 +17,7 @@ def ack_num_gen(window_left : int,
              flag : list,
              ack_max : int,
              window_size : int):
-    assert((window_right - window_left + 1 + ack_max) % ack_max == len(flag) and \
+    assert((window_right - window_left + ack_max) % ack_max == len(flag) and \
             window_size == len(flag))
     # 先发 ACK，后面的子区间发送 SACK
     
@@ -58,18 +38,18 @@ def ack_num_gen(window_left : int,
             sack_list.append((sack_left, (window_left + i - 1) % ack_max))
             sack_left = None
     if sack_left != None:
-        sack_list.append((sack_left, (window_right) % ack_max))
+        sack_list.append((sack_left, (window_right - 1) % ack_max))
     if sack_left == None and ack_num == None:
-        ack_num = (window_right + 1) % ack_max
+        ack_num = (window_right) % ack_max
     
     print(f"ACK: {ack_num}, SACK: {sack_list}")
     
     # ACK: 9, SACK: [(10, 10), (12, 1), (3, 3)]
     return ack_num, sack_list
 
-def send_ack(receive_window : RECEIVE_WINDOW):
+def send_ack(receive_window : WINDOW):
     from common_modules import send_message
-    print("enter send_ack")
+    print(f"ENTER SEND ACK")
     window_left = receive_window.left
     window_right = receive_window.right
     ack_max = receive_window.ack_max
@@ -84,7 +64,7 @@ def send_ack(receive_window : RECEIVE_WINDOW):
         message = NEW_ACK_text + ack_num.to_bytes(2, 'big')
         # print(message)
         
-        send_message(message, type = 'DATA')
+        send_message(message, type = 'ACK', send_directly = True)
     
     if sack_list != []:
         messages = b''
@@ -92,12 +72,14 @@ def send_ack(receive_window : RECEIVE_WINDOW):
             message = SACK_text + sack[0].to_bytes(2, 'big') + sack[1].to_bytes(2, 'big')
             messages += message
             # print(message)
-        send_message(messages, type = 'DATA')
+        send_message(messages, type = 'SACK', send_directly = True)
         
     # 尝试右移接收窗口
     # ack_num 为从左到右第一个 False 的位置
     move_step = (ack_num - window_left + ack_max) % ack_max
-    receive_window.move_right(move_step)
+    receive_window.open(move_step)
+    receive_window.close(move_step)
+    # receive_window.move_right(move_step)
     
     # from Client.cc_client import ack_event_timer
     # ack_event_timer.reset()
@@ -130,8 +112,6 @@ def test_ack_num_gen():
     window_size = 11
     flag = [True, True, True, True, True, False, True, True, True, True, True]
     ack_num, sack_list = ack_num_gen(window_left, window_right, flag, ack_max, window_size)
-    
-    
     message = NEW_ACK_text + ack_num.to_bytes(2, 'big')
     print(message)
     

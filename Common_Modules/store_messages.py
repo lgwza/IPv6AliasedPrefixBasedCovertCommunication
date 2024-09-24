@@ -4,7 +4,7 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 sys.path.insert(0, parent_dir)
-from error_handle import RECEIVE_CACHE
+from Common_Modules.error_handle import RECEIVE_CACHE
 # from common_modules import packet_seq, write_to_file_event_timer
 import threading
 
@@ -35,17 +35,13 @@ def store_receive_cache(receive_cache : RECEIVE_CACHE, \
             written_text += receive_cache.cache[receive_cache.head][0]
             receive_cache.cache[receive_cache.head] = (None, None)
             receive_cache.head = (receive_cache.head + 1) % receive_cache.size
-    print(f"written_text: {written_text}")
+    print(f"WRITING {written_text} TO FILE")
     if written_text != '':
         with open(receive_cache.get_file_name(), 'a') as f:
             f.write(written_text)
     
     # write_to_file_event_timer.reset()
     return
-
-        
-        
-
 
 def test():
     cache = RECEIVE_CACHE()
