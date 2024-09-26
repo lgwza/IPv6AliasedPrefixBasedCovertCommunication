@@ -37,7 +37,9 @@ class ResettableTimer:
             self.start_time = time.time()  # 记录开始时间
             if not self._thread.is_alive():  # 确保只创建一个线程
                 self._thread.start()
-            print(f"Timer started for {self.interval} seconds.")
+                # 输出线程绑定的函数
+                print(f"Timer started for {self.function.__name__} with interval {self.interval} seconds.")
+            # print(f"Timer started for {self.interval} seconds.")
 
     def reset(self):
         """重置计时器，使其重新计时。"""

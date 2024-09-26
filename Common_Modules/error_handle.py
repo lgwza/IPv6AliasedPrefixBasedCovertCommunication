@@ -219,21 +219,76 @@ class RECEIVE_WINDOW(WINDOW):
         ack_num, sack_list = self.ack_num_gen()
         
         if ack_num != None:
-            message = NEW_ACK_text + ack_num.to_bytes(2, 'big')
+            message = ack_num.to_bytes(2, 'big') + NEW_ACK_text
             send_message(message, type = 'ACK', send_directly = True)
         
         if sack_list != []:
             messages = b''
             for sack in sack_list:
-                message = SACK_text + sack[0].to_bytes(2, 'big') + sack[1].to_bytes(2, 'big')
+                message = sack[0].to_bytes(2, 'big') + sack[1].to_bytes(2, 'big') + SACK_text
                 messages += message
             send_message(messages, type = 'SACK', send_directly = True)
+        return True
+    
+    def flag_set(self, packet_seq_num : Union[int, List[Tuple[int, int]]], \
+                 packet_type : str) -> bool:
+        # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
+        if packet_type == 'DATA':
+            if not self.is_in_window(packet_seq_num):
+                print("WARNING: DATA NUMBER OUT OF WINDOW")
+                return False
+            winPos = (packet_seq_num - self.left + self.seq_max) % self.seq_max
+            self.window[winPos] = True
+            if winPos == 0:
+                # 右移窗口
+                # 确定窗口中第一个未接收的包
+                try:
+                    falsePos = self.window.index(False)
+                except:
+                    falsePos = self.window_size
+                self.close(falsePos)
+                self.open(falsePos)
+                
+        else:
+            print("WARNING: RECEIVE WINDOW ONLY SUPPORT DATA PACKET")
         return True
     
     
 class SEND_WINDOW(WINDOW):
     def __init__(self, max_window_size : int = 1000):
         super().__init__(max_window_size)
+        
+    def flag_set(self, packet_seq_num : Union[int, List[Tuple[int, int]]], \
+                 packet_type : str) -> bool:
+        # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
+        # 对于 ACK，标记发送窗口中 [left, ACK) 已确认
+        if packet_type == 'ACK':
+            if not self.is_in_window(packet_seq_num):
+                print("WARNING: ACK NUMBER OUT OF WINDOW")
+                return False
+            winRight = (packet_seq_num - self.left + self.seq_max) % self.seq_max
+            self.window[:winRight] = [True] * winRight
+        # 对于 SACK，标记发送窗口中 [sack_left, sack_right] 已确认
+        elif packet_type == 'SACK':
+            for sack in packet_seq_num:
+                sack_left = sack[0]
+                sack_right = sack[1]
+                if not self.is_in_window(sack_left) or not self.is_in_window(sack_right):
+                    print("WARNING: SACK SECTION OUT OF WINDOW")
+                    return False
+                winLeft = (sack[0] - self.left + self.seq_max) % self.seq_max
+                winRight = (sack[1] - self.left + self.seq_max) % self.seq_max
+                self.window[winLeft : winRight + 1] = [True] * (winRight - winLeft + 1)
+        else:
+            print("WARNING: SEND WINDOW ONLY SUPPORT ACK AND SACK PACKET")
+            return False
+        try:
+            falsePos = self.window.index(False)
+        except:
+            falsePos = self.window_size
+        self.close(falsePos)
+        self.open(falsePos)
+        return True
     
 class CACHE:
     # 队列缓存
@@ -361,6 +416,8 @@ class RECEIVE_CACHE(CACHE):
     def __init__(self, size = 100):
         super().__init__(size)
         self.cache = [(None, None)] * size
+        self.head = 0
+        self.tail = size - 1
         
     def add(self, text, seq):
         if self.is_full():

@@ -51,65 +51,69 @@ def retransmit_cache_event(ack_num):
     retransmit_flag = True
     
 # 定义回调函数处理接收到的IPv6和ICMPv6包
-def packet_handler(packet):
+def packet_handler():
     global status, source_address, dst_address, \
         received_messages, expected_seq, receive_window, \
         send_window, send_cache, receive_cache, receive_cache_lock, \
         resend_data_event_timer, ack_event_timer, write_to_file_event_timer, timer
-    # print(packet[IPv6].src, packet[IPv6].dst)
-    # print(f"status: {status}")
-    plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
-    print("RECEIVING PACKET")
-    print(f"plain_text: {plain_text}")
-    print(f"packet_type: {packet_type}")
-    print(f"packet_seq_num: {packet_seq_num}")
-    print(f"proto: {proto}")
-    
-    if plain_text == SYN_ACK_text and status == SYN_SENT:
-        print("ESTABLISHED")
-        status = ESTABLISHED
-        
-        
-        receive_window.init_window(packet_seq_num + 1) # TODO: 初始序列号问题
-        # receive_cache.update(plain_text.decode(), packet_seq_num)
-        
-        
-        send_message(ACK_text, type = 'INFO', send_directly = True)
-        
-        send_window.init_window(Seq.get_seq())
-        send_handler = threading.Thread(target = send_input)
-        send_handler.start()
-        
-        timer.start()
-        print("Timer started")
-        
-        ack_event_timer.start()
-        # resend_data_event_timer.start()
-        write_to_file_event_timer.start()
-    elif status == ESTABLISHED:
-        ack_event_timer.reset() # 收到包后计时重置
+    while True:
+        packet = packet_queue.get()
+        if packet is None:
+            continue
+        # print(packet[IPv6].src, packet[IPv6].dst)
+        # print(f"status: {status}")
         plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
-        # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
+        print("RECEIVING PACKET")
+        print(f"plain_text: {plain_text}")
+        print(f"packet_type: {packet_type}")
+        print(f"packet_seq_num: {packet_seq_num}")
+        print(f"proto: {proto}")
         
-        if packet_type == 'ACK' or packet_type == 'SACK':
-            resend_data_event_timer.reset()
-            # 对端已接收，需要在发送窗口中标记对端已接收
-            send_window.flag_set(packet_seq_num, packet_type)
-            # flag_set(send_window, packet_seq_num, packet_type)
-            resend_data(send_window, send_cache)
-        elif packet_type == 'DATA':
-            if not receive_window.is_in_window(packet_seq_num):
-                # send_ack(receive_window)
-                receive_window.send_ack()
-            else:
-                # 收到的包在接收窗口内
-                # 在接收窗口中标记已接收
-                receive_window.flag_set(packet_seq_num, packet_type)
-                # flag_set(receive_window, packet_seq_num, packet_type)
-                # TODO: 更新接收缓存，并且在合适的时候写入文件
-                update_receive_cache(receive_cache, plain_text.decode(), packet_seq_num, receive_cache_lock)
-        elif packet_type == 'INFO' and plain_text == RST_text:
-            exit(0)
+        if plain_text == SYN_ACK_text and status == SYN_SENT:
+            print("ESTABLISHED")
+            status = ESTABLISHED
+            
+            
+            receive_window.init_window(packet_seq_num + 1, 5000) # TODO: 初始序列号问题
+            # receive_cache.update(plain_text.decode(), packet_seq_num)
+            
+            send_message(ACK_text, type = 'INFO', send_directly = True)
+            
+            send_window.init_window(Seq.get_seq('U'), 5000)
+            send_handler = threading.Thread(target = send_input)
+            send_handler.start()
+            
+            timer.start()
+            print("Timer started")
+            
+            ack_event_timer.start()
+            # resend_data_event_timer.start()
+            write_to_file_event_timer.start()
+        elif status == ESTABLISHED:
+            ack_event_timer.reset() # 收到包后计时重置
+            plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
+            # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
+            
+            if packet_type == 'ACK' or packet_type == 'SACK':
+                resend_data_event_timer.reset()
+                # 对端已接收，需要在发送窗口中标记对端已接收
+                send_window.flag_set(packet_seq_num, packet_type)
+                # flag_set(send_window, packet_seq_num, packet_type)
+                resend_data(send_window, send_cache)
+            elif packet_type == 'DATA':
+                if not receive_window.is_in_window(packet_seq_num):
+                    # send_ack(receive_window)
+                    receive_window.send_ack()
+                else:
+                    # 收到的包在接收窗口内
+                    # 在接收窗口中标记已接收
+                    receive_window.flag_set(packet_seq_num, packet_type)
+                    # flag_set(receive_window, packet_seq_num, packet_type)
+                    # TODO: 更新接收缓存，并且在合适的时候写入文件
+                    update_receive_cache(receive_cache, plain_text.decode(), packet_seq_num, receive_cache_lock)
+            elif packet_type == 'INFO' and plain_text == RST_text:
+                print("RST RECEIVED!!!!!")
+                exit(0)
             
 def send_input():
     if send_file_mode:
@@ -119,7 +123,7 @@ def send_input():
             print(file_message)
             send_message(file_message)
         print("File sent!")
-        send_message(RST_text, type = 'INFO', send_directly = True)
+        # send_message(RST_text, type = 'INFO', send_directly = True)
     else:
         while True:
             Input = input("Please input your message: ")
@@ -135,8 +139,15 @@ def init():
         
 if __name__ == "__main__":
     gen_next_mode_dict()
-    receive_handler = threading.Thread(target = receive_message,
-                                       args = (sys.modules[__name__],))
+    
+    receive_handler = threading.Thread(target = packet_handler)
     receive_handler.start()
+    
+    receive_message_thread = threading.Thread(target = receive_message)
+    receive_message_thread.start()
+    
     time.sleep(1)
     init()
+    
+    receive_handler.join()
+    receive_message_thread.join()

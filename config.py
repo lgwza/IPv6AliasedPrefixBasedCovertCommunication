@@ -76,7 +76,7 @@ sleep_time = 0.025
 inter_time = 0.015
 
 # key = get_key()
-key = b"12345727"
+key = b"12345728"
 initial_message = b'\x00\x01\x02\x03\x04\x05\x06\x07'
 SYN_text = b'\x01\x02\x03\x04\x05\x06\x07\x08'
 SYN_ACK_text = b'\x01\x02\x03\x04\x01\x02\x03\x04'

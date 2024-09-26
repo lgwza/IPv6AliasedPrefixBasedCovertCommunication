@@ -30,6 +30,9 @@ from timers import ResettableTimer
 from store_messages import store_receive_cache
 from Common_Modules.ack_send import send_ack
 from Common_Modules.data_resend import resend_data
+import queue
+
+packet_queue = queue.Queue()
 
 # 忽略所有警告
 warnings.filterwarnings("ignore")
@@ -64,7 +67,7 @@ retransmit_seq_num = -1
 receive_cache_lock = threading.Lock()
 send_cache_lock = threading.Lock()
 
-ack_event_timer = ResettableTimer(0.2, send_ack, receive_window)
+ack_event_timer = ResettableTimer(0.2, receive_window.send_ack)
 resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
 write_to_file_event_timer = ResettableTimer(2, store_receive_cache, receive_cache, receive_cache_lock)
 
@@ -155,30 +158,34 @@ def handle_packet(packet):
     # NEW_ACK_text = b'\x08\x07\x06\x05\x04\x03'
     # SACK_text = b'\x01\x02\x01\x02'
     if len(all_plain_text) == 8:
-        # 前 6 个字节为
-        if all_plain_text[: 6] == NEW_ACK_text:
-            packet_seq_num = int.from_bytes(all_plain_text[6 :], 'big')
+        # 后 6 个字节为
+        if all_plain_text[-6 : ] == NEW_ACK_text:
+            packet_seq_num = int.from_bytes(all_plain_text[ : 2], 'big')
             return all_plain_text, 'ACK', packet_seq_num, proto
-        elif all_plain_text[: 4] == SACK_text:
-            packet_seq_num = [(int.from_bytes(all_plain_text[4 : 6], 'big'), \
-                               int.from_bytes(all_plain_text[6 :], 'big'))]
+        # 后 4 个字节为特征
+        elif all_plain_text[-4 : ] == SACK_text:
+            packet_seq_num = [(int.from_bytes(all_plain_text[ : 2], 'big'), \
+                               int.from_bytes(all_plain_text[2 : 4], 'big'))]
     
     elif len(all_plain_text) == 16:
-        if all_plain_text[: 6] == NEW_ACK_text:
-            packet_seq_num = int.from_bytes(all_plain_text[6 : 8], 'big')
+        if all_plain_text[-6 : ] == NEW_ACK_text:
+            packet_seq_num = int.from_bytes(all_plain_text[ : 2], 'big')
             return all_plain_text, 'ACK', packet_seq_num, proto
-        elif all_plain_text[: 4] == SACK_text:
-            packet_seq_num = [(int.from_bytes(all_plain_text[4 : 6], 'big'), \
-                               int.from_bytes(all_plain_text[6 : 8], 'big'))]
-            if all_plain_text[8 : 12] == SACK_text:
-                packet_seq_num.append((int.from_bytes(all_plain_text[12 : 14], 'big'), \
-                                       int.from_bytes(all_plain_text[14 :], 'big')))
+        elif all_plain_text[4 : 8] == SACK_text:
+            packet_seq_num = [(int.from_bytes(all_plain_text[ : 2], 'big'), \
+                               int.from_bytes(all_plain_text[2 : 4], 'big'))]
+            if all_plain_text[12 : ] == SACK_text:
+                packet_seq_num.append((int.from_bytes(all_plain_text[8 : 10], 'big'), \
+                                       int.from_bytes(all_plain_text[10 : 12], 'big')))
             return all_plain_text, 'SACK', packet_seq_num, proto
     
     # 处理 'DATA' 类型的包
     packet_seq_num = packet_seq(packet)
+    packet_type = 'DATA'
     
-    return all_plain_text, 'DATA', packet_seq_num, proto
+    if all_plain_text[ : 8] in [SYN_text, SYN_ACK_text, ACK_text, RST_text]:
+        packet_type = 'INFO'    
+    return all_plain_text, packet_type, packet_seq_num, proto
 
 def packet_seq(packet):
     if 'TCP' in packet:
@@ -200,7 +207,7 @@ def packet_proto(packet):
     else:
         return ''
     
-def receive_message(caller_module):
+def receive_message():
     # 启动嗅探器并调用回调函数
     host_or_net = "host"
     dst_addr_or_net = dst_address
@@ -230,9 +237,13 @@ def receive_message(caller_module):
     # caller_module = sys.modules[caller_name]
     # print(f'caller_module: {caller_module}')
     # 动态获取调用者模块并调用它的 `func`
+    print("FILTER CONDITION: ", filter_condition)
+    
+    
     sniff(filter = filter_condition,
-            prn = caller_module.packet_handler,
-            store = 0)
+          prn = lambda x: packet_queue.put(x),
+          store = 0,
+          iface = source_iface)
     
     
 # proto: I ICMPv6, T TCP, U UDP, S SCTP, Raw Raw
@@ -242,7 +253,7 @@ def gen_packet(dstv6, srcv6, proto, type = 'DATA'):
     if type == 'DATA':
         now_seq = Seq.get_seq(proto)
     elif type == 'INFO':
-        now_seq = random.randint(1, UDP_MAX)
+        now_seq = Seq.get_seq(proto)
     elif type == 'ACK':
         # 随机
         now_seq = random.randint(1, UDP_MAX)
@@ -327,10 +338,11 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 send_cache.update(complete_packet)
                 # 尝试将发送窗口右边界右移
                 # TODO: 一定是 UDP 吗？
-                send_window.extend_to_seq(Seq.get_seq('U'))
+                # send_window.extend_to_seq(Seq.get_seq('U'))
                 Seq.seq_plus()
             else:
                 send(complete_packet)
+                Seq.seq_plus()
     elif dstv6_prefix != None and srcv6_prefix != None:
         for i in range(0, len(encrypted_blocks_hex), 2):
             dstv6 = dstv6_prefix
@@ -349,10 +361,11 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 send_cache.update(complete_packet)
                 # 尝试将发送窗口右边界右移
                 # TODO: 一定是 UDP 吗？
-                send_window.extend_to_seq(Seq.get_seq('U'))
+                # send_window.extend_to_seq(Seq.get_seq('U'))
                 Seq.seq_plus()
             else:
                 send(complete_packet)
+                Seq.seq_plus()
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
