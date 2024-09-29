@@ -51,7 +51,7 @@ def gen_next_mode_dict():
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
 # proto_list = ['I', 'U', 'T', 'S', 'Raw']
-proto_list = ['U']
+proto_list = ['T']
 last_mode = ''
 next_mode = {}
 gen_next_mode_dict()
@@ -71,7 +71,7 @@ filter_condition_dict = {
     'NDP': 'icmp6 and ip6[40] == 135'
 }
 
-send_file_mode = True
+send_file_mode = False
 sleep_time = 0.025
 inter_time = 0.015
 

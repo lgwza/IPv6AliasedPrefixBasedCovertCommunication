@@ -75,7 +75,7 @@ def resend_data(send_window : SEND_WINDOW, send_cache : CACHE):
         resend_list += cache_list[left_idx : right_idx + 1]
     print(f"RESENDING LIST: {resend_list}")
     # 重传 resend_list 中的数据包
-    sendp(resend_list, inter = inter_time)
+    send(resend_list, inter = inter_time)
         
 def test():
     send_window = SEND_WINDOW(10)

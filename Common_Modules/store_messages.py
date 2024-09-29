@@ -16,10 +16,7 @@ def update_receive_cache(receive_cache : RECEIVE_CACHE, \
                          receive_cache_lock : threading.Lock) -> RECEIVE_CACHE:
     print("ENTER UPDATE RECEIVE CACHE")
     with receive_cache_lock:
-        if receive_cache.cache[receive_cache.head][0] == None:
-            receive_cache.cache[receive_cache.head] = (plain_text, packet_seq_num)
-            return receive_cache
-        head_seq_num = receive_cache.cache[receive_cache.head][1]
+        head_seq_num = receive_cache.head_seq
         target_idx = ((packet_seq_num - head_seq_num + receive_cache.seq_max) % receive_cache.seq_max + receive_cache.head) % receive_cache.size
         receive_cache.write_to_pos(target_idx, plain_text, packet_seq_num)
     return receive_cache
@@ -36,6 +33,7 @@ def store_receive_cache(receive_cache : RECEIVE_CACHE, \
             receive_cache.cache[receive_cache.head] = (None, None)
             receive_cache.head = (receive_cache.head + 1) % receive_cache.size
             receive_cache.tail = (receive_cache.tail + 1) % receive_cache.size
+            receive_cache.head_seq = (receive_cache.head_seq + 1) % receive_cache.seq_max
     print(f"WRITING {written_text} TO FILE")
     if written_text != '':
         with open(receive_cache.get_file_name(), 'a') as f:

@@ -73,9 +73,9 @@ def packet_handler():
             print("ESTABLISHED")
             status = ESTABLISHED
             
-            
-            receive_window.init_window(packet_seq_num + 1, 5000) # TODO: 初始序列号问题
-            # receive_cache.update(plain_text.decode(), packet_seq_num)
+            # INFO 不增加序列号
+            receive_window.init_window(packet_seq_num, 5000) # TODO: 初始序列号问题
+            receive_cache.head_seq = packet_seq_num
             
             send_message(ACK_text, type = 'INFO', send_directly = True)
             
@@ -107,10 +107,12 @@ def packet_handler():
                 else:
                     # 收到的包在接收窗口内
                     # 在接收窗口中标记已接收
-                    receive_window.flag_set(packet_seq_num, packet_type)
-                    # flag_set(receive_window, packet_seq_num, packet_type)
+                    print("SEQ IS IN WINDOW")
                     # TODO: 更新接收缓存，并且在合适的时候写入文件
-                    update_receive_cache(receive_cache, plain_text.decode(), packet_seq_num, receive_cache_lock)
+                    update_receive_cache(receive_cache, plain_text.decode(), \
+                        packet_seq_num, receive_cache_lock)
+                    receive_window.flag_set(packet_seq_num, packet_type)
+                    
             elif packet_type == 'INFO' and plain_text == RST_text:
                 print("RST RECEIVED!!!!!")
                 exit(0)

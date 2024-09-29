@@ -418,6 +418,7 @@ class RECEIVE_CACHE(CACHE):
         self.cache = [(None, None)] * size
         self.head = 0
         self.tail = size - 1
+        self.head_seq = 0
         
     def add(self, text, seq):
         if self.is_full():
@@ -435,5 +436,7 @@ class RECEIVE_CACHE(CACHE):
     def write_to_pos(self, idx, text, seq):
         assert(0 <= idx and idx < self.size)
         # assert(self.cache[idx] == (None, None))
+        print(f"WRITING {text} TO CACHE AT {idx}")
+        print(f"CACHE HEAD: {self.head}, CACHE TAIL: {self.tail}")
         self.cache[idx] = (text, seq)
         return True

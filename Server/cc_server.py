@@ -35,7 +35,8 @@ def packet_handler():
     global status, source_address, dst_address, \
         received_messages, expected_seq, receive_window, \
         send_window, send_cache, receive_cache, receive_cache_lock, \
-        resend_data_event_timer, ack_event_timer, write_to_file_event_timer, timer
+        resend_data_event_timer, ack_event_timer, write_to_file_event_timer, \
+        timer, receive_cache_head_seq
     # print("Source IPv6 address: ", packet[IPv6].src)
     # print("status: ", status)    
     while True:
@@ -69,7 +70,10 @@ def packet_handler():
             timer.start()
             print("Timer started")
             
-            receive_window.init_window(packet_seq_num + 1, 5000) # TODO: 处理 INFO 的序列号问题
+            
+            # INFO 不增加序列号
+            receive_window.init_window(packet_seq_num, 5000) # TODO: 处理 INFO 的序列号问题
+            receive_cache.head_seq = packet_seq_num
             
             ack_event_timer.start()
             write_to_file_event_timer.start()
@@ -90,9 +94,11 @@ def packet_handler():
                     # 收到的包在接收窗口内
                     # 在接收窗口中标记已接收
                     print("SEQ IS IN WINDOW")
-                    receive_window.flag_set(packet_seq_num, packet_type)
                     # TODO: 更新接收缓存，并且在合适的时候写入文件
-                    update_receive_cache(receive_cache, plain_text.decode(), packet_seq_num, receive_cache_lock)
+                    update_receive_cache(receive_cache, plain_text.decode(), \
+                        packet_seq_num, receive_cache_lock)
+                    receive_window.flag_set(packet_seq_num, packet_type)
+                    
             elif packet_type == 'INFO' and plain_text == RST_text:
                 print("RST RECEIVED!!!!!")
                 exit(0)

@@ -67,7 +67,7 @@ retransmit_seq_num = -1
 receive_cache_lock = threading.Lock()
 send_cache_lock = threading.Lock()
 
-ack_event_timer = ResettableTimer(0.2, receive_window.send_ack)
+ack_event_timer = ResettableTimer(2, receive_window.send_ack)
 resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
 write_to_file_event_timer = ResettableTimer(2, store_receive_cache, receive_cache, receive_cache_lock)
 
@@ -341,8 +341,10 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 # send_window.extend_to_seq(Seq.get_seq('U'))
                 Seq.seq_plus()
             else:
+                print(f"SENDING {type} PACKET DIRECTLY")
                 send(complete_packet)
-                Seq.seq_plus()
+                if type == 'DATA':
+                    Seq.seq_plus()
     elif dstv6_prefix != None and srcv6_prefix != None:
         for i in range(0, len(encrypted_blocks_hex), 2):
             dstv6 = dstv6_prefix
@@ -364,8 +366,10 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 # send_window.extend_to_seq(Seq.get_seq('U'))
                 Seq.seq_plus()
             else:
+                print(f"SENDING {type} PACKET DIRECTLY")
                 send(complete_packet)
-                Seq.seq_plus()
+                if type == 'DATA':
+                    Seq.seq_plus()
     else:
         print(f"ERROR! BOTH ADDRESSES ARE NOT SPOOFABLE!")
         exit(-1)
