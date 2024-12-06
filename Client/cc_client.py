@@ -55,10 +55,18 @@ def packet_handler():
     global status, source_address, dst_address, \
         received_messages, expected_seq, receive_window, \
         send_window, send_cache, receive_cache, receive_cache_lock, \
-        resend_data_event_timer, ack_event_timer, write_to_file_event_timer, timer
+        resend_data_event_timer, ack_event_timer, write_to_file_event_timer, timer, \
+        packet_queue
     while True:
+        if stop_event.is_set():
+            print("PACKET HANDLER STOPPED")
+            exit(0)
+        
+        
+        print(f"PACKET QUEUE SIZE: {packet_queue.qsize()}")
         packet = packet_queue.get()
         if packet is None:
+            print("WARNING: PACKET IS NONE")
             continue
         # print(packet[IPv6].src, packet[IPv6].dst)
         # print(f"status: {status}")
@@ -74,12 +82,12 @@ def packet_handler():
             status = ESTABLISHED
             
             # INFO 不增加序列号
-            receive_window.init_window(packet_seq_num, 5000) # TODO: 初始序列号问题
+            receive_window.init_window(packet_seq_num, receive_window_size) # TODO: 初始序列号问题
             receive_cache.head_seq = packet_seq_num
             
             send_message(ACK_text, type = 'INFO', send_directly = True)
             
-            send_window.init_window(Seq.get_seq('U'), 5000)
+            send_window.init_window(Seq.get_seq('U'), send_window_size)
             send_handler = threading.Thread(target = send_input)
             send_handler.start()
             
@@ -95,15 +103,16 @@ def packet_handler():
             # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
             
             if packet_type == 'ACK' or packet_type == 'SACK':
-                resend_data_event_timer.reset()
+                # resend_data_event_timer.reset()
                 # 对端已接收，需要在发送窗口中标记对端已接收
                 send_window.flag_set(packet_seq_num, packet_type)
                 # flag_set(send_window, packet_seq_num, packet_type)
-                resend_data(send_window, send_cache)
+                # resend_data(send_window, send_cache)
             elif packet_type == 'DATA':
                 if not receive_window.is_in_window(packet_seq_num):
                     # send_ack(receive_window)
-                    receive_window.send_ack()
+                    # receive_window.send_ack()
+                    pass
                 else:
                     # 收到的包在接收窗口内
                     # 在接收窗口中标记已接收
@@ -115,6 +124,7 @@ def packet_handler():
                     
             elif packet_type == 'INFO' and plain_text == RST_text:
                 print("RST RECEIVED!!!!!")
+                stop_event.set()
                 exit(0)
             
 def send_input():
@@ -150,6 +160,3 @@ if __name__ == "__main__":
     
     time.sleep(1)
     init()
-    
-    receive_handler.join()
-    receive_message_thread.join()

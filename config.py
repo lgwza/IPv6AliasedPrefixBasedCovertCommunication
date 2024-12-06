@@ -21,19 +21,32 @@ except:
     print("ERROR! SOURCE INFO INCOMPLETE!")
     exit(-1)
 
-source_address = result_src
-source_mac = result_mac
-source_iface = result_dev
+# source_address = result_src
+
+# source_address = "2001:db8:1::1"
+# source_mac = "96:c9:39:e4:05:03"
+# source_iface = "veth0"
+# dst_address = "2001:db8:2::2"
+
+source_address = "2402:f000:6:1e00::232"
+source_mac = "2c:ea:7f:ed:0b:a0"
+source_iface = "eno1"
+dst_address = "2401:c080:1000:4662:3eec:efff:feb9:8630"
+
+# source_mac = result_mac
+
 src_dst_ip_set = {"2402:f000:6:1e00::232",
                   "2401:c080:1000:4662:3eec:efff:feb9:8630"}
 # dst_address = list(src_dst_ip_set - {source_address})[0]
-dst_address = "2402:f000:6:1e00::232"
+
 # print(dst_address)
 
 # 该地址的源地址能否发送信息，目的地址能否接收信息
 spoofable_info = {"2402:f000:6:1e00::232": [False, False],
                   "2401:c080:1000:4662:3eec:efff:feb9:8630": [True, True],
-                  "2a09:7c41:0:15::1": [False, False]}
+                  "2a09:7c41:0:15::1": [False, False],
+                  "2001:db8:1::1": [False, False],
+                  "2001:db8:2::2": [True, True]}
 
 source_saddr_spoofable = spoofable_info[source_address][0] # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
 source_daddr_spoofable = spoofable_info[dst_address][1] # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
@@ -51,7 +64,7 @@ def gen_next_mode_dict():
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
 # proto_list = ['I', 'U', 'T', 'S', 'Raw']
-proto_list = ['T']
+proto_list = ['I']
 last_mode = ''
 next_mode = {}
 gen_next_mode_dict()
@@ -71,9 +84,23 @@ filter_condition_dict = {
     'NDP': 'icmp6 and ip6[40] == 135'
 }
 
-send_file_mode = False
+send_file_mode = True
+receive_file_size = 0
+
+
 sleep_time = 0.025
-inter_time = 0.015
+inter_time = 0.00001
+
+send_cache_size = 1500
+receive_cache_size = 1500
+send_window_max_size = 250
+receive_window_max_size = 500
+send_window_size = 50
+receive_window_size = 100
+ack_event_timer_interval = 0.0005
+resend_data_event_timer_interval = 0.0005
+write_to_file_event_timer_interval = 0.1
+
 
 # key = get_key()
 key = b"12345728"

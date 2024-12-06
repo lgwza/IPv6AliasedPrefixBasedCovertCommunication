@@ -263,7 +263,7 @@ class SEND_WINDOW(WINDOW):
         # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
         # 对于 ACK，标记发送窗口中 [left, ACK) 已确认
         if packet_type == 'ACK':
-            if not self.is_in_window(packet_seq_num):
+            if not self.is_in_window(packet_seq_num) and packet_seq_num != self.right:
                 print("WARNING: ACK NUMBER OUT OF WINDOW")
                 return False
             winRight = (packet_seq_num - self.left + self.seq_max) % self.seq_max
@@ -440,3 +440,26 @@ class RECEIVE_CACHE(CACHE):
         print(f"CACHE HEAD: {self.head}, CACHE TAIL: {self.tail}")
         self.cache[idx] = (text, seq)
         return True
+    
+class SEND_CACHE(CACHE):
+    def __init__(self, size = 1000):
+        super().__init__(size)
+    #     self.cache = [(None, None)] * size
+    #     self.head = 0
+    #     self.tail = size - 1
+        self.head_seq = 0
+        
+    # def add(self, text, seq):
+    #     if self.is_full():
+    #         return False
+    #     self.cache[self.tail] = (text, seq)
+    #     self.tail = (self.tail + 1) % self.size
+    #     return True
+    
+    # def update(self, text, seq):
+    #     if self.is_full():
+    #         self.pop()
+    #     self.add(text, seq)
+    #     return True
+        
+        

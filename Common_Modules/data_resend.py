@@ -5,7 +5,7 @@ parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 sys.path.insert(0, parent_dir)
 
 from typing import List, Tuple
-from Common_Modules.error_handle import SEND_WINDOW, CACHE, WINDOW
+from Common_Modules.error_handle import SEND_WINDOW, CACHE, WINDOW, SEND_CACHE
 
 from config import inter_time
 from scapy.all import send, sendp
@@ -36,12 +36,12 @@ def seq_num_gen(send_window : WINDOW) -> List[Tuple[int, int]]:
 
 # 将发送窗口中未被确认的数据包重新发送
 # 并且在发送缓存中是存在的
-def resend_data(send_window : SEND_WINDOW, send_cache : CACHE):
-    print("ENTER RESEND_DATA")
+def resend_data(send_window : SEND_WINDOW, send_cache : SEND_CACHE):
+    # print("ENTER RESEND_DATA")
     from common_modules import packet_seq
     seq_num_section_list = seq_num_gen(send_window) # [(int, int), (int, int), ...]，每个元组表示一个序列号区间，区间内的数据包需要重传
     if len(seq_num_section_list) == 0:
-        print("NO DATA TO SEND")
+        # print("NO DATA TO SEND")
         return
     first_packet_seq_num = seq_num_section_list[0][0]
     # 在 send_cache 中找到第一个需要重传的数据包
@@ -50,6 +50,7 @@ def resend_data(send_window : SEND_WINDOW, send_cache : CACHE):
         return
     first_idx = -1
     print(f"seq_num_section_list: {seq_num_section_list}")
+    # first_idx = first_packet_seq_num - send_cache.head_seq
     for i in range(len(cache_list)):
         if packet_seq(cache_list[i]) == first_packet_seq_num:
             first_idx = i

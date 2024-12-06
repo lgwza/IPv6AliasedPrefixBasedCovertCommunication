@@ -1,0 +1,1 @@
+sudo python3 Client/cc_client.py

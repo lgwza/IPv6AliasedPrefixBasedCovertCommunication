@@ -32,28 +32,33 @@ from Common_Modules.ack_send import send_ack
 from Common_Modules.data_resend import resend_data
 import queue
 
+stop_event = threading.Event()
+stop_event.clear()
+
 packet_queue = queue.Queue()
 
 # 忽略所有警告
 warnings.filterwarnings("ignore")
 
-timer = Timer()
-
 status = CLOSED
 
+# import inspect
+# caller_name = inspect.stack()[1].filename
+# print(inspect.stack())
+# print(f"caller_name: {caller_name}")
 print("调用 common_modules.py")
 print("in common_modules.py, next_mode: ", next_mode)
 received_messages = b""
 expected_seq = 0
 
-receive_cache = RECEIVE_CACHE(10000)
-send_cache = CACHE(10000)
+receive_cache = RECEIVE_CACHE(receive_cache_size)
+send_cache = SEND_CACHE(send_cache_size)
 
 Ack = ACK()
 Seq = SEQ()
 
-receive_window = RECEIVE_WINDOW(max_window_size = 5000)
-send_window = SEND_WINDOW(max_window_size = 5000)
+receive_window = RECEIVE_WINDOW(max_window_size = receive_window_max_size)
+send_window = SEND_WINDOW(max_window_size = send_window_max_size)
 
 # send_window.init_window(Seq.get_seq('U')) # TODO: 一定是 UDP 吗？
 
@@ -63,13 +68,19 @@ send_packet_pause_event.set()
 retransmit_flag = False
 retransmit_seq_num = -1
 
+timer = Timer()
+
 
 receive_cache_lock = threading.Lock()
 send_cache_lock = threading.Lock()
 
-ack_event_timer = ResettableTimer(2, receive_window.send_ack)
-resend_data_event_timer = ResettableTimer(2, resend_data, send_window, send_cache)
-write_to_file_event_timer = ResettableTimer(2, store_receive_cache, receive_cache, receive_cache_lock)
+ack_event_timer = ResettableTimer(stop_event, ack_event_timer_interval, \
+    receive_window.send_ack)
+resend_data_event_timer = ResettableTimer(stop_event, resend_data_event_timer_interval, \
+    resend_data, send_window, send_cache)
+write_to_file_event_timer = ResettableTimer(stop_event, write_to_file_event_timer_interval, \
+    store_receive_cache, receive_cache, receive_cache_lock, timer, stop_event,
+    ack_event_timer, resend_data_event_timer)
 
 
 def gen_next_mode_dict():
@@ -122,6 +133,7 @@ def cast_decrypt_block(key, ciphertext_block, block_size = 8):
         return None
 
 def handle_packet(packet):
+    print("ENTER PACKET HANDLER")
     global source_saddr_spoofable, source_daddr_spoofable, \
         dst_saddr_spoofable, dst_daddr_spoofable
     # print("Destination IPv6 address: ", packet[IPv6].dst)
@@ -208,6 +220,7 @@ def packet_proto(packet):
         return ''
     
 def receive_message():
+    global packet_queue
     # 启动嗅探器并调用回调函数
     host_or_net = "host"
     dst_addr_or_net = dst_address
@@ -239,9 +252,18 @@ def receive_message():
     # 动态获取调用者模块并调用它的 `func`
     print("FILTER CONDITION: ", filter_condition)
     
+    def put_packet_into_queue(packet):
+        global packet_queue
+        packet_queue.put(packet)
+        print("packet_queue size =", packet_queue.qsize())
+        if stop_event.is_set():
+            ack_event_timer.stop()
+            resend_data_event_timer.stop()
+            write_to_file_event_timer.stop()
+            exit(0)
     
     sniff(filter = filter_condition,
-          prn = lambda x: packet_queue.put(x),
+          prn = put_packet_into_queue,
           store = 0,
           iface = source_iface)
     
@@ -332,8 +354,9 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
             if not send_directly:
                 send_packet_pause_event.wait()
                 while not send_cache.is_updatable():
-                    print("not updatable")
+                    # print("not updatable")
                     # time.sleep(sleep_time)
+                    continue
                 print("WRITE SEND CACHE", complete_packet.summary())
                 send_cache.update(complete_packet)
                 # 尝试将发送窗口右边界右移
@@ -357,8 +380,9 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
             if not send_directly:
                 send_packet_pause_event.wait()
                 while not send_cache.is_updatable():
-                    print("not updatable")
+                    # print("not updatable")
                     # time.sleep(sleep_time)
+                    continue
                 print("WRITE SEND CACHE", complete_packet.summary())
                 send_cache.update(complete_packet)
                 # 尝试将发送窗口右边界右移

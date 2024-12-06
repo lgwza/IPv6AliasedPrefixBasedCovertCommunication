@@ -28,7 +28,6 @@ from Common_Modules.ack_send import send_ack
 from Common_Modules.data_resend import resend_data
 from Common_Modules.set_flag import flag_set
 from Common_Modules.store_messages import update_receive_cache, store_receive_cache
-    
 
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler():
@@ -36,16 +35,22 @@ def packet_handler():
         received_messages, expected_seq, receive_window, \
         send_window, send_cache, receive_cache, receive_cache_lock, \
         resend_data_event_timer, ack_event_timer, write_to_file_event_timer, \
-        timer, receive_cache_head_seq
+        timer, packet_queue
     # print("Source IPv6 address: ", packet[IPv6].src)
     # print("status: ", status)    
     while True:
-        print(f"PACKET QUEUE: {packet_queue}")
-        packet = packet_queue.get()
+        if stop_event.is_set():
+            print("PACKET HANDLER STOPPED")
+            exit(0)
+            
+        print(f"PACKET QUEUE SIZE: {packet_queue.qsize()}")
+        packet = packet_queue.get() # 阻塞于此操作了
         if packet is None:
+            print("WARNING: PACKET IS NONE")
             continue
+        
         plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
-        print("ENTER PACKET HANDLER")
+        
         print(f"plain_text: {plain_text}")
         print(f"packet_type: {packet_type}")
         print(f"packet_seq_num: {packet_seq_num}")
@@ -55,15 +60,16 @@ def packet_handler():
             status = SYN_RECEIVED
             Seq.set_seq(random.randint(1, UDP_MAX))
             send_message(SYN_ACK_text, type = 'INFO', send_directly = True)        
-            
         elif plain_text == ACK_text and status == SYN_RECEIVED:
             print("ESTABLISHED")
             # TODO 需要更严谨的逻辑
             status = ESTABLISHED
             
-            send_window.init_window(Seq.get_seq('U'), 5000)
-            send_handler = threading.Thread(target = send_input)
-            send_handler.start()
+            send_window.init_window(Seq.get_seq('U'), send_window_size)
+            
+            # TODO: chat_mode
+            # send_handler = threading.Thread(target = send_input)
+            # send_handler.start()
             
             resend_data_event_timer.start()
             
@@ -72,7 +78,7 @@ def packet_handler():
             
             
             # INFO 不增加序列号
-            receive_window.init_window(packet_seq_num, 5000) # TODO: 处理 INFO 的序列号问题
+            receive_window.init_window(packet_seq_num, receive_window_size) # TODO: 处理 INFO 的序列号问题
             receive_cache.head_seq = packet_seq_num
             
             ack_event_timer.start()
@@ -80,16 +86,17 @@ def packet_handler():
         elif status == ESTABLISHED:
             ack_event_timer.reset() # 收到包后计时重置
             if packet_type == 'ACK' or packet_type == 'SACK':
-                resend_data_event_timer.reset()
+                # resend_data_event_timer.reset()
                 # 对端已接收，需要在发送窗口中标记对端已接收
                 send_window.flag_set(packet_seq_num, packet_type)
-                resend_data(send_window, send_cache)
+                # resend_data(send_window, send_cache)
             elif packet_type == 'DATA':
                 print("RECEIVING DATA")
                 print(f"{receive_window.left} {receive_window.right}")
                 if not receive_window.is_in_window(packet_seq_num):
                     # send_ack(receive_window)
-                    receive_window.send_ack()
+                    # receive_window.send_ack()
+                    pass
                 else:
                     # 收到的包在接收窗口内
                     # 在接收窗口中标记已接收
@@ -101,6 +108,7 @@ def packet_handler():
                     
             elif packet_type == 'INFO' and plain_text == RST_text:
                 print("RST RECEIVED!!!!!")
+                stop_event.set()
                 exit(0)
 
 def send_input():
@@ -118,6 +126,13 @@ if __name__ == "__main__":
     receive_message_thread = threading.Thread(target = receive_message)
     receive_message_thread.start()
     
-    listen_handler.join()
-    receive_message_thread.join()
+    # listen_handler.join()
+    # receive_message_thread.join()
     
+    # while stop_event.is_set():
+    #     continue
+    # listen_handler.__stop()
+    # receive_message_thread.__stop()
+    # exit(-1)
+    
+

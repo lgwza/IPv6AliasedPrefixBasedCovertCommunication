@@ -2,7 +2,7 @@ import threading
 import time
 
 class ResettableTimer:
-    def __init__(self, interval, function, *args, **kwargs):
+    def __init__(self, stop_event, interval, function, *args, **kwargs):
         """
         初始化可重置计时器。
         :param interval: 时间间隔（秒）。
@@ -20,6 +20,7 @@ class ResettableTimer:
         self._thread.daemon = False  # 让线程在主线程退出时自动结束
         self._is_running = False
         self.start_time = None  # 用于记录开始时间
+        self.stop_event = stop_event
 
     def _run_timer(self):
         """定时器运行的主循环，确保只创建一个线程来处理循环计时。"""
@@ -60,6 +61,20 @@ class ResettableTimer:
         if self.start_time:
             return time.time() - self.start_time
         return 0
+    
+class Timer:
+    def __init__(self):
+        self.start_time = 0
+        self.end_time = 0
+    
+    def start(self):
+        self.start_time = time.time()
+    
+    def end(self):
+        self.end_time = time.time()
+    
+    def get_time(self):
+        return self.end_time - self.start_time
         
 
 def on_timer_expired(Str):
