@@ -49,12 +49,15 @@ def resend_data(send_window : SEND_WINDOW, send_cache : SEND_CACHE):
     if cache_list == None:
         return
     first_idx = -1
-    print(f"seq_num_section_list: {seq_num_section_list}")
+    # print(f"seq_num_section_list: {seq_num_section_list}")
     # first_idx = first_packet_seq_num - send_cache.head_seq
-    for i in range(len(cache_list)):
-        if packet_seq(cache_list[i]) == first_packet_seq_num:
-            first_idx = i
-            break
+    head_seq = packet_seq(cache_list[0])
+    first_idx = (first_packet_seq_num - head_seq + send_window.seq_max) % send_window.seq_max
+    # for i in range(len(cache_list)):
+    #     if packet_seq(cache_list[i]) == first_packet_seq_num:
+    #         assert(i == first_idx)
+    #         first_idx = i
+    #         break
     # 把 send_cache 中对应的子区间提取出来
     if first_idx == -1:
         return False
@@ -74,9 +77,9 @@ def resend_data(send_window : SEND_WINDOW, send_cache : SEND_CACHE):
         # assert(left_seq_num == packet_seq(cache_list[left_idx]) and right_seq_num == packet_seq(cache_list[right_idx]))
         
         resend_list += cache_list[left_idx : right_idx + 1]
-    print(f"RESENDING LIST: {resend_list}")
+    # print(f"RESENDING LIST: {resend_list}")
     # 重传 resend_list 中的数据包
-    send(resend_list, inter = inter_time)
+    sendp(resend_list, inter = inter_time)
         
 def test():
     send_window = SEND_WINDOW(10)

@@ -208,14 +208,14 @@ class RECEIVE_WINDOW(WINDOW):
         if sack_left == None and ack_num == None:
             ack_num = (self.right) % self.seq_max
         
-        print("ACK NUM GENERATED")
-        print(f"ACK: {ack_num}, SACK: {sack_list}")
+        # print("ACK NUM GENERATED")
+        # print(f"ACK: {ack_num}, SACK: {sack_list}")
         
         return ack_num, sack_list
     
     def send_ack(self):
         from common_modules import send_message
-        print("ENTER SEND ACK")
+        # print("ENTER SEND ACK")
         ack_num, sack_list = self.ack_num_gen()
         
         if ack_num != None:
@@ -264,6 +264,7 @@ class SEND_WINDOW(WINDOW):
         # 对于 ACK，标记发送窗口中 [left, ACK) 已确认
         if packet_type == 'ACK':
             if not self.is_in_window(packet_seq_num) and packet_seq_num != self.right:
+                print(f"WINDOW: {self.left}, {self.right}")
                 print("WARNING: ACK NUMBER OUT OF WINDOW")
                 return False
             winRight = (packet_seq_num - self.left + self.seq_max) % self.seq_max

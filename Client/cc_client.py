@@ -63,7 +63,7 @@ def packet_handler():
             exit(0)
         
         
-        print(f"PACKET QUEUE SIZE: {packet_queue.qsize()}")
+        # print(f"PACKET QUEUE SIZE: {packet_queue.qsize()}")
         packet = packet_queue.get()
         if packet is None:
             print("WARNING: PACKET IS NONE")
@@ -91,6 +91,7 @@ def packet_handler():
             send_handler = threading.Thread(target = send_input)
             send_handler.start()
             
+            
             timer.start()
             print("Timer started")
             
@@ -98,7 +99,7 @@ def packet_handler():
             # resend_data_event_timer.start()
             write_to_file_event_timer.start()
         elif status == ESTABLISHED:
-            ack_event_timer.reset() # 收到包后计时重置
+            # ack_event_timer.reset() # 收到包后计时重置
             plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
             # packet_seq_num, ACK: int, SACK: [(int, int)], DATA: int
             
@@ -132,7 +133,7 @@ def send_input():
         file_path = "random_text.txt"
         with open(file_path, "r") as f:
             file_message = f.read()
-            print(file_message)
+            # print(file_message)
             send_message(file_message)
         print("File sent!")
         # send_message(RST_text, type = 'INFO', send_directly = True)
@@ -151,6 +152,8 @@ def init():
         
 if __name__ == "__main__":
     gen_next_mode_dict()
+    
+    
     
     receive_handler = threading.Thread(target = packet_handler)
     receive_handler.start()

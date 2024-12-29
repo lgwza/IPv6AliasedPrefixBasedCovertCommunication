@@ -1,85 +1,50 @@
-import threading
+import random
+import string
+from scapy.all import *
 import time
 
-class ResettableTimer:
-    def __init__(self, interval, function, *args, **kwargs):
-        """
-        初始化可重置计时器。
-        :param interval: 时间间隔（秒）。
-        :param function: 计时器到期时调用的函数。
-        :param args: 传递给函数的参数。
-        :param kwargs: 传递给函数的关键字参数。
-        """
-        self.interval = interval
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self._stop_event = threading.Event()  # 用于停止线程
-        self._reset_event = threading.Event()  # 用于重置计时器
-        self._thread = threading.Thread(target=self._run_timer)
-        self._thread.daemon = True  # 让线程在主线程退出时自动结束
-        self._is_running = False
-        self.start_time = None  # 用于记录开始时间
+# Step 1: Generate random text of length 5000
+def generate_random_text(length=10000):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-    def _run_timer(self):
-        """定时器运行的主循环，确保只创建一个线程来处理循环计时。"""
-        while not self._stop_event.is_set():
-            self._reset_event.wait(self.interval)  # 等待间隔时间或重置事件
-            if not self._reset_event.is_set():  # 如果重置事件没有触发，正常调用函数
-                self.function(*self.args, **self.kwargs)
-            self._reset_event.clear()  # 清除重置事件，准备下一次循环
+random_text = generate_random_text()
 
-    def start(self):
-        """启动计时器，如果计时器已经运行则忽略。"""
-        if not self._is_running:
-            self._is_running = True
-            self._stop_event.clear()
-            self.start_time = time.time()  # 记录开始时间
-            if not self._thread.is_alive():  # 确保只创建一个线程
-                self._thread.start()
-            print(f"Timer started for {self.interval} seconds.")
+# Step 2: Convert the random text to hexadecimal
+hex_representation = random_text.encode('utf-8').hex()
 
-    def reset(self):
-        """重置计时器，使其重新计时。"""
-        if self._is_running:
-            self._reset_event.set()  # 设置重置事件
-            self.start_time = time.time()  # 重置开始时间
-            print("Timer reset.")
+# Step 3: Split the hex data into 64-bit (8 bytes) groups
+# Each group corresponds to 16 hex characters (8 bytes * 2 hex characters per byte)
+hex_groups = [hex_representation[i:i+16] for i in range(0, len(hex_representation), 16)]
 
-    def stop(self):
-        """停止计时器。"""
-        self._is_running = False
-        self._stop_event.set()  # 停止事件
-        self._reset_event.set()  # 防止线程卡在等待
-        print("Timer stopped.")
+# Step 4: Construct ICMPv6 packets with destination address 2001:db8:2::/64 + generated 64 bits
+icmpv6_packets = []
+# prefix = "2001:db8:2:"  # The fixed IPv6 prefix (first 64 bits)
+prefix = "2001:252:188:fe0"
 
-    def get_elapsed_time(self):
-        """获取当前计时器的流逝时间（秒）。"""
-        if self.start_time:
-            return time.time() - self.start_time
-        return 0
+for i, group in enumerate(hex_groups):
+    # Construct the full IPv6 destination address (prefix + the generated 64 bits)
+    # We insert ':' every 4 characters to correctly format the IPv6 address
+    formatted_group = ':'.join([group[j:j+4] for j in range(0, len(group), 4)])
+    destination_ip = prefix + ':' + formatted_group
+    # print(f"Destination IP {i+1}: {destination_ip}")
+    # Create ICMPv6 Echo Request packet
+    icmpv6_packet = IPv6(dst=destination_ip) / ICMPv6EchoRequest()
+    icmpv6_packet = Ether() / icmpv6_packet
+    # Append the packet to the list
+    
+    icmpv6_packets.append(icmpv6_packet)
 
-# 示例：定义一个简单的函数，每次被调用时输出信息
-def my_function():
-    print("Function called!")
+# Step 5: Send all ICMPv6 packets
+# Note: root privileges may be required to send ICMP packets
 
-# 创建定时器，每 3 秒调用一次函数
-timer = ResettableTimer(3, my_function)
+# 计时
+start_time = time.time()
 
-# 启动定时器
-timer.start()
+# send(icmpv6_packets)
+sendp(icmpv6_packets)
 
-# 等待2秒后获取流逝时间
-time.sleep(2)
-print(f"Elapsed time: {timer.get_elapsed_time()} seconds")
-
-# 等待5秒后重置计时器
-time.sleep(5)
-timer.reset()
-
-# 再次等待3秒后获取流逝时间
-time.sleep(3)
-print(f"Elapsed time: {timer.get_elapsed_time()} seconds")
-
-# 停止计时器
-timer.stop()
+end_time = time.time()
+print(f"Time taken to send all packets: {end_time - start_time:.2f} seconds")
+print(len(random_text))
+print(f"BANDWIDTH: {len(random_text) / (end_time - start_time) * 8} bit/s")
+print(f"speed: {len(icmpv6_packets) / (end_time - start_time)} packets/s")

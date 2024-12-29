@@ -23,15 +23,23 @@ except:
 
 # source_address = result_src
 
-# source_address = "2001:db8:1::1"
-# source_mac = "96:c9:39:e4:05:03"
-# source_iface = "veth0"
-# dst_address = "2001:db8:2::2"
+Simulation = 1
+dst_choice = 2
+if Simulation == 0:
+    source_address = "2001:db8:1::1"
+    source_mac = "96:c9:39:e4:05:03"
+    source_iface = "veth0"
+elif Simulation == 1:
+    source_address = "2402:f000:6:1e00::232"
+    source_mac = "2c:ea:7f:ed:0b:a0"
+    source_iface = "eno1"
 
-source_address = "2402:f000:6:1e00::232"
-source_mac = "2c:ea:7f:ed:0b:a0"
-source_iface = "eno1"
-dst_address = "2401:c080:1000:4662:3eec:efff:feb9:8630"
+if dst_choice == 0:
+    dst_address = "2001:db8:2::2"
+elif dst_choice == 1:
+    dst_address = "2401:c080:1000:4662:3eec:efff:feb9:8630"
+elif dst_choice == 2:
+    dst_address = "2001:252:188:fe0::1"
 
 # source_mac = result_mac
 
@@ -46,7 +54,8 @@ spoofable_info = {"2402:f000:6:1e00::232": [False, False],
                   "2401:c080:1000:4662:3eec:efff:feb9:8630": [True, True],
                   "2a09:7c41:0:15::1": [False, False],
                   "2001:db8:1::1": [False, False],
-                  "2001:db8:2::2": [True, True]}
+                  "2001:db8:2::2": [True, True],
+                  "2001:252:188:fe0::1": [True, True]}
 
 source_saddr_spoofable = spoofable_info[source_address][0] # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
 source_daddr_spoofable = spoofable_info[dst_address][1] # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
@@ -84,23 +93,49 @@ filter_condition_dict = {
     'NDP': 'icmp6 and ip6[40] == 135'
 }
 
+
+
 send_file_mode = True
+send_file_size = 0
+
+if send_file_mode:
+    file_path = "random_text.txt"
+    with open(file_path, "r") as f:
+        file_message = f.read()
+        send_file_size = len(file_message)
+
 receive_file_size = 0
+# send_file_size = 5000
 
+sleep_time = 0.025 # 弃用
 
-sleep_time = 0.025
-inter_time = 0.00001
+RTT = 0.615 # ms
+packet_loss_rate = 0.0158 # %
 
-send_cache_size = 1500
+max_send_speed = 1100
+inter_time = 0
+real_inter_time = 1 / max_send_speed
+send_cache_size = send_file_size // 8 + 10
 receive_cache_size = 1500
-send_window_max_size = 250
-receive_window_max_size = 500
-send_window_size = 50
-receive_window_size = 100
+send_window_max_size = int(1e8)
+receive_window_max_size = int(1e8)
+# 会影响，太大导致seq_num_gen较慢，太小导致XXXXX TODO
+send_window_size = min(5000, send_cache_size) 
+receive_window_size = 5000
 ack_event_timer_interval = 0.0005
 resend_data_event_timer_interval = 0.0005
 write_to_file_event_timer_interval = 0.1
 
+# send_window_size = int(send_window_size / (packet_loss_rate * 100 + 1))
+receive_window_size = int(receive_window_size / (packet_loss_rate * 100 + 1))
+resend_data_event_timer_interval = max(RTT / 1000, send_window_size * real_inter_time)
+resend_data_event_timer_interval = 0.5
+ack_event_timer_interval = max(RTT / 1000, receive_window_size * real_inter_time)
+
+print(f"send_window_size: {send_window_size}")
+print(f"receive_window_size: {receive_window_size}")
+print(f"resend_data_event_timer_interval: {resend_data_event_timer_interval}")
+print(f"ack_event_timer_interval: {ack_event_timer_interval}")
 
 # key = get_key()
 key = b"12345728"

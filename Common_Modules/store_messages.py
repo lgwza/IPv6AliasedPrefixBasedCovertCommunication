@@ -36,14 +36,14 @@ def store_receive_cache(receive_cache : RECEIVE_CACHE, \
     # 从 head 到 tail
     written_text = ''
     with receive_cache_lock:
-        print(f"receive_cache: {receive_cache.cache[receive_cache.head : receive_cache.head + 5]}")
+        # print(f"receive_cache: {receive_cache.cache[receive_cache.head : receive_cache.head + 5]}")
         while receive_cache.cache[receive_cache.head][0] != None:
             written_text += receive_cache.cache[receive_cache.head][0]
             receive_cache.cache[receive_cache.head] = (None, None)
             receive_cache.head = (receive_cache.head + 1) % receive_cache.size
             receive_cache.tail = (receive_cache.tail + 1) % receive_cache.size
             receive_cache.head_seq = (receive_cache.head_seq + 1) % receive_cache.seq_max
-    print(f"WRITING {written_text} TO FILE")
+    # print(f"WRITING {written_text} TO FILE")
     if written_text != '':
         with open(receive_cache.get_file_name(), 'a') as f:
             f.write(written_text)

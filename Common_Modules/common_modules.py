@@ -10,7 +10,7 @@ parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 # 将父目录添加到sys.path
 sys.path.insert(0, parent_dir)
 from scapy.all import IPv6, send, ICMPv6EchoRequest, sniff, TCP, UDP,\
-    Raw, SCTP, SCTPChunkData
+    Raw, SCTP, SCTPChunkData, Ether, sendp
 
 from Crypto.Cipher import CAST
 from Crypto.Util.Padding import pad, unpad
@@ -61,9 +61,6 @@ receive_window = RECEIVE_WINDOW(max_window_size = receive_window_max_size)
 send_window = SEND_WINDOW(max_window_size = send_window_max_size)
 
 # send_window.init_window(Seq.get_seq('U')) # TODO: 一定是 UDP 吗？
-
-send_packet_pause_event = threading.Event()
-send_packet_pause_event.set()
 
 retransmit_flag = False
 retransmit_seq_num = -1
@@ -133,7 +130,7 @@ def cast_decrypt_block(key, ciphertext_block, block_size = 8):
         return None
 
 def handle_packet(packet):
-    print("ENTER PACKET HANDLER")
+    # print("ENTER PACKET HANDLER")
     global source_saddr_spoofable, source_daddr_spoofable, \
         dst_saddr_spoofable, dst_daddr_spoofable
     # print("Destination IPv6 address: ", packet[IPv6].dst)
@@ -255,7 +252,7 @@ def receive_message():
     def put_packet_into_queue(packet):
         global packet_queue
         packet_queue.put(packet)
-        print("packet_queue size =", packet_queue.qsize())
+        # print("packet_queue size =", packet_queue.qsize())
         if stop_event.is_set():
             ack_event_timer.stop()
             resend_data_event_timer.stop()
@@ -307,6 +304,7 @@ def gen_packet(dstv6, srcv6, proto, type = 'DATA'):
         print(f"ERROR! MODE {proto} IS NOT DEFINED!")
         exit(-1)
     # print(complete_packet.summary())
+    complete_packet = Ether() / complete_packet
     return complete_packet
     
 def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
@@ -352,20 +350,19 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 dstv6 = dst_address
             complete_packet = packet_assemble(dstv6, srcv6, mode, type)
             if not send_directly:
-                send_packet_pause_event.wait()
                 while not send_cache.is_updatable():
                     # print("not updatable")
                     # time.sleep(sleep_time)
                     continue
-                print("WRITE SEND CACHE", complete_packet.summary())
+                # print("WRITE SEND CACHE", complete_packet.summary())
                 send_cache.update(complete_packet)
                 # 尝试将发送窗口右边界右移
                 # TODO: 一定是 UDP 吗？
                 # send_window.extend_to_seq(Seq.get_seq('U'))
                 Seq.seq_plus()
             else:
-                print(f"SENDING {type} PACKET DIRECTLY")
-                send(complete_packet)
+                # print(f"SENDING {type} PACKET DIRECTLY")
+                sendp(complete_packet)
                 if type == 'DATA':
                     Seq.seq_plus()
     elif dstv6_prefix != None and srcv6_prefix != None:
@@ -378,20 +375,19 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 srcv6 = srcv6 + ":" + encrypted_blocks_hex[i + 1][j : j + 4]
             complete_packet = packet_assemble(dstv6, srcv6, mode, type)
             if not send_directly:
-                send_packet_pause_event.wait()
                 while not send_cache.is_updatable():
                     # print("not updatable")
                     # time.sleep(sleep_time)
                     continue
-                print("WRITE SEND CACHE", complete_packet.summary())
+                # print("WRITE SEND CACHE", complete_packet.summary())
                 send_cache.update(complete_packet)
                 # 尝试将发送窗口右边界右移
                 # TODO: 一定是 UDP 吗？
                 # send_window.extend_to_seq(Seq.get_seq('U'))
                 Seq.seq_plus()
             else:
-                print(f"SENDING {type} PACKET DIRECTLY")
-                send(complete_packet)
+                # print(f"SENDING {type} PACKET DIRECTLY")
+                sendp(complete_packet)
                 if type == 'DATA':
                     Seq.seq_plus()
     else:
@@ -432,8 +428,10 @@ def send_message(message, type = 'DATA', send_directly = False):
     encrypted_blocks = cast_encrypt_blocks(key, plaintext_blocks)
     encrypted_blocks_hex = [block.hex() for block in encrypted_blocks]
     if not send_directly:
-        print(f"READY TO WRITE PLAIN TEXT {plain_text} TO SEND CACHE")
+        # print(f"READY TO WRITE PLAIN TEXT {plain_text} TO SEND CACHE")
+        pass
     else:
-        print(f"READY TO SEND PLAIN TEXT {plain_text}")
+        # print(f"READY TO SEND PLAIN TEXT {plain_text}")
+        pass
     send_packet(encrypted_blocks_hex, dstv6_prefix, srcv6_prefix, block_size, type, send_directly)
     

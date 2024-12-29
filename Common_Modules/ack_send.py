@@ -49,7 +49,7 @@ def ack_num_gen(window_left : int,
 
 def send_ack(receive_window : WINDOW):
     from common_modules import send_message
-    print(f"ENTER SEND ACK")
+    # print(f"ENTER SEND ACK")
     window_left = receive_window.left
     window_right = receive_window.right
     ack_max = receive_window.ack_max

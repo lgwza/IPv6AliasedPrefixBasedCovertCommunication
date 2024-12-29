@@ -47,7 +47,7 @@ class ResettableTimer:
         if self._is_running:
             self._reset_event.set()  # 设置重置事件
             self.start_time = time.time()  # 重置开始时间
-            print("Timer reset.")
+            # print("Timer reset.")
 
     def stop(self):
         """停止计时器。"""
