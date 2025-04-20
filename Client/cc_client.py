@@ -1,4 +1,4 @@
-
+import psutil
 from datetime import datetime, timedelta, timezone
 import sys
 import os
@@ -41,14 +41,6 @@ from Common_Modules.store_messages import update_receive_cache, store_receive_ca
 warnings.filterwarnings("ignore")
 
 resend_data_event_timer.start()
-
-def retransmit_cache_event(ack_num):
-    global send_cache, retransmit_flag, retransmit_seq_num
-    time.sleep(sleep_time) # 触发重传事件后休眠 2 秒
-    # 将发送缓存中的 seq_num 之后的数据包重传
-    
-    retransmit_seq_num = ack_num
-    retransmit_flag = True
     
 # 定义回调函数处理接收到的IPv6和ICMPv6包
 def packet_handler():
@@ -71,11 +63,11 @@ def packet_handler():
         # print(packet[IPv6].src, packet[IPv6].dst)
         # print(f"status: {status}")
         plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
-        print("RECEIVING PACKET")
-        print(f"plain_text: {plain_text}")
-        print(f"packet_type: {packet_type}")
-        print(f"packet_seq_num: {packet_seq_num}")
-        print(f"proto: {proto}")
+        # print("RECEIVING PACKET")
+        # print(f"plain_text: {plain_text}")
+        # print(f"packet_type: {packet_type}")
+        # print(f"packet_seq_num: {packet_seq_num}")
+        # print(f"proto: {proto}")
         
         if plain_text == SYN_ACK_text and status == SYN_SENT:
             print("ESTABLISHED")
@@ -119,13 +111,20 @@ def packet_handler():
                     # 在接收窗口中标记已接收
                     print("SEQ IS IN WINDOW")
                     # TODO: 更新接收缓存，并且在合适的时候写入文件
-                    update_receive_cache(receive_cache, plain_text.decode(), \
+                    update_receive_cache(receive_cache, plain_text.decode(encoding = "latin-1"), \
                         packet_seq_num, receive_cache_lock)
                     receive_window.flag_set(packet_seq_num, packet_type)
                     
             elif packet_type == 'INFO' and plain_text == RST_text:
                 print("RST RECEIVED!!!!!")
                 stop_event.set()
+                resend_data_event_timer.stop()
+                ack_event_timer.stop()
+                write_to_file_event_timer.stop()
+                print(f"send_window_size: {send_window_size}")
+                print(f"send_cache_size: {send_cache_size}")
+                print(f"actual resend_data_event_timer_interval: {resend_data_event_timer_interval}")
+                print(f"calculated resend_data_event_timer_interval: {max(RTT / 1000, send_window_size * real_inter_time)}")
                 exit(0)
             
 def send_input():
@@ -150,10 +149,29 @@ def init():
         print("SYN_SENT")
         status = SYN_SENT
         
+def monitor_resources():
+    pid = os.getpid()
+    process = psutil.Process(pid)
+    with open("overhead/resource_usage.txt", "a") as f:
+        f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    while True:
+        cpu_usage = process.cpu_percent(interval=1)
+        memory_info = process.memory_info()
+        
+        print(f"CPU Usage: {cpu_usage}%")
+        print(f"Memory Usage: {memory_info.rss / 1024 / 1024:.2f}MB")
+        
+        # 写入文件
+        with open("overhead/resource_usage.txt", "a") as f:
+            f.write(f"CPU Usage: {cpu_usage}%\n")
+            f.write(f"Memory Usage: {memory_info.rss / 1024 / 1024:.2f}MB\n")
+        # time.sleep(1)
+        
 if __name__ == "__main__":
+    monitor_resources_thread = threading.Thread(target = monitor_resources)
+    monitor_resources_thread.start()
+    
     gen_next_mode_dict()
-    
-    
     
     receive_handler = threading.Thread(target = packet_handler)
     receive_handler.start()

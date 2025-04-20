@@ -6,33 +6,41 @@ try:
     command_dev = "ip -6 route get 2001:4860:4860::8888 | grep -oP '(?<=dev )\S+'"
     result_dev = subprocess.run(command_dev, shell=True, stdout=subprocess.PIPE)
     result_dev = result_dev.stdout.decode().strip()
-    print(f'source_dev: {result_dev}')
+    # print(f'source_dev: {result_dev}')
 
     command_src = "ip -6 route get 2001:4860:4860::8888 | grep -oP '(?<=src )\S+'"
     result_src = subprocess.run(command_src, shell=True, stdout=subprocess.PIPE)
     result_src = result_src.stdout.decode().strip()
-    print(f'source_ip: {result_src}')
+    # print(f'source_ip: {result_src}')
 
     command_mac = "ifconfig " + result_dev + " | grep -oP '(?<=ether )\S+'"
     result_mac = subprocess.run(command_mac, shell=True, stdout=subprocess.PIPE)
     result_mac = result_mac.stdout.decode().strip()
-    print(f'source_mac: {result_mac}')
+    # print(f'source_mac: {result_mac}')
 except:
     print("ERROR! SOURCE INFO INCOMPLETE!")
     exit(-1)
 
 # source_address = result_src
 
-Simulation = 1
+Simulation = 3
 dst_choice = 2
 if Simulation == 0:
     source_address = "2001:db8:1::1"
-    source_mac = "96:c9:39:e4:05:03"
+    source_mac = "62:b5:51:0f:35:ff"
     source_iface = "veth0"
 elif Simulation == 1:
     source_address = "2402:f000:6:1e00::232"
     source_mac = "2c:ea:7f:ed:0b:a0"
     source_iface = "eno1"
+elif Simulation == 2:
+    source_address = "2402:f000:6:1e00::232"
+    source_mac = "ba:10:42:f3:b7:24"
+    source_iface = "enowza"
+elif Simulation == 3:
+    source_address = "2402:f000:6:1e00::230"
+    source_mac = "2c:ea:7f:ed:0b:a1"
+    source_iface = "eno2"
 
 if dst_choice == 0:
     dst_address = "2001:db8:2::2"
@@ -47,7 +55,7 @@ src_dst_ip_set = {"2402:f000:6:1e00::232",
                   "2401:c080:1000:4662:3eec:efff:feb9:8630"}
 # dst_address = list(src_dst_ip_set - {source_address})[0]
 
-# print(dst_address)
+print(f"dst_address: {dst_address}")
 
 # 该地址的源地址能否发送信息，目的地址能否接收信息
 spoofable_info = {"2402:f000:6:1e00::232": [False, False],
@@ -55,7 +63,8 @@ spoofable_info = {"2402:f000:6:1e00::232": [False, False],
                   "2a09:7c41:0:15::1": [False, False],
                   "2001:db8:1::1": [False, False],
                   "2001:db8:2::2": [True, True],
-                  "2001:252:188:fe0::1": [True, True]}
+                  "2001:252:188:fe0::1": [True, True],
+                  "2402:f000:6:1e00::230": [False, False]}
 
 source_saddr_spoofable = spoofable_info[source_address][0] # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
 source_daddr_spoofable = spoofable_info[dst_address][1] # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
@@ -73,7 +82,20 @@ def gen_next_mode_dict():
 # I for ICMPv6, U for UDP, T for TCP, 
 # S for SCTP, R for Raw
 # proto_list = ['I', 'U', 'T', 'S', 'Raw']
-proto_list = ['I']
+# read from config_file/ICMPv6, config_file/UDP, config_file/TCP 0/1
+proto_list = []
+with open("config_file/ICMPv6", "r") as f:
+    use_ICMPv6 = f.read().strip()
+    if use_ICMPv6 == '1':
+        proto_list.append('I')
+with open("config_file/UDP", "r") as f:
+    use_UDP = f.read().strip()
+    if use_UDP == '1':
+        proto_list.append('U')
+with open("config_file/TCP", "r") as f:
+    use_TCP = f.read().strip()
+    if use_TCP == '1':
+        proto_list.append('T')
 last_mode = ''
 next_mode = {}
 gen_next_mode_dict()
@@ -96,7 +118,7 @@ filter_condition_dict = {
 
 
 send_file_mode = True
-send_file_size = 0
+send_file_size = -1
 
 if send_file_mode:
     file_path = "random_text.txt"
@@ -107,12 +129,19 @@ if send_file_mode:
 receive_file_size = 0
 # send_file_size = 5000
 
-sleep_time = 0.025 # 弃用
+with open("../router/veth1/delay_ms", "r") as f:
+    RTT = f.read().strip()
+with open("../router/veth1/loss", "r") as f:
+    packet_loss_rate = f.read().strip()
+with open("../router/veth1/rate", "r") as f:
+    max_rate = f.read().strip()
 
-RTT = 0.615 # ms
-packet_loss_rate = 0.0158 # %
+RTT = int(RTT.strip("ms")) # 50ms
+packet_loss_rate = int(packet_loss_rate.strip("%")) # %
+print(RTT, packet_loss_rate)
 
-max_send_speed = 1100
+
+max_send_speed = 1500
 inter_time = 0
 real_inter_time = 1 / max_send_speed
 send_cache_size = send_file_size // 8 + 10
@@ -120,16 +149,16 @@ receive_cache_size = 1500
 send_window_max_size = int(1e8)
 receive_window_max_size = int(1e8)
 # 会影响，太大导致seq_num_gen较慢，太小导致XXXXX TODO
-send_window_size = min(5000, send_cache_size) 
+send_window_size = min(3000, send_cache_size)
 receive_window_size = 5000
 ack_event_timer_interval = 0.0005
 resend_data_event_timer_interval = 0.0005
-write_to_file_event_timer_interval = 0.1
+write_to_file_event_timer_interval = 5
 
-# send_window_size = int(send_window_size / (packet_loss_rate * 100 + 1))
-receive_window_size = int(receive_window_size / (packet_loss_rate * 100 + 1))
+send_window_size = int(send_window_size * (100 - packet_loss_rate) / 100)
+receive_window_size = int(receive_window_size / (packet_loss_rate + 1))
 resend_data_event_timer_interval = max(RTT / 1000, send_window_size * real_inter_time)
-resend_data_event_timer_interval = 0.5
+# resend_data_event_timer_interval = 1
 ack_event_timer_interval = max(RTT / 1000, receive_window_size * real_inter_time)
 
 print(f"send_window_size: {send_window_size}")

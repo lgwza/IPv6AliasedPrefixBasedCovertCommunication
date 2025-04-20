@@ -7,7 +7,7 @@ sys.path.insert(0, parent_dir)
 from typing import List, Tuple
 from Common_Modules.error_handle import SEND_WINDOW, CACHE, WINDOW, SEND_CACHE
 
-from config import inter_time
+from config import inter_time, source_iface, real_inter_time
 from scapy.all import send, sendp
 
 # 返回发送窗口中数据包尚未被确认的序列号闭区间
@@ -79,7 +79,7 @@ def resend_data(send_window : SEND_WINDOW, send_cache : SEND_CACHE):
         resend_list += cache_list[left_idx : right_idx + 1]
     # print(f"RESENDING LIST: {resend_list}")
     # 重传 resend_list 中的数据包
-    sendp(resend_list, inter = inter_time)
+    sendp(resend_list, inter = inter_time, iface = source_iface, verbose = False)
         
 def test():
     send_window = SEND_WINDOW(10)

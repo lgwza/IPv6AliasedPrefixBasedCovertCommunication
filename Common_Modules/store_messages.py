@@ -6,8 +6,10 @@ parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 sys.path.insert(0, parent_dir)
 from Common_Modules.error_handle import RECEIVE_CACHE
 # from common_modules import packet_seq, write_to_file_event_timer
+
 import threading
-from config import receive_file_size, send_file_mode
+from config import receive_file_size, send_file_mode, \
+    send_window_size, receive_window_size
 from timers import Timer
 
 written_total_length = 0
@@ -36,14 +38,14 @@ def store_receive_cache(receive_cache : RECEIVE_CACHE, \
     # 从 head 到 tail
     written_text = ''
     with receive_cache_lock:
-        # print(f"receive_cache: {receive_cache.cache[receive_cache.head : receive_cache.head + 5]}")
+        print(f"receive_cache: {receive_cache.cache[receive_cache.head : receive_cache.head + 5]}")
         while receive_cache.cache[receive_cache.head][0] != None:
             written_text += receive_cache.cache[receive_cache.head][0]
             receive_cache.cache[receive_cache.head] = (None, None)
             receive_cache.head = (receive_cache.head + 1) % receive_cache.size
             receive_cache.tail = (receive_cache.tail + 1) % receive_cache.size
             receive_cache.head_seq = (receive_cache.head_seq + 1) % receive_cache.seq_max
-    # print(f"WRITING {written_text} TO FILE")
+    print(f"WRITING {written_text} TO FILE")
     if written_text != '':
         with open(receive_cache.get_file_name(), 'a') as f:
             f.write(written_text)
@@ -51,16 +53,19 @@ def store_receive_cache(receive_cache : RECEIVE_CACHE, \
         print(f"WRITTEN TOTAL LENGTH: {written_total_length}")
         if written_total_length >= receive_file_size and not send_file_mode:
             print("RECEIVED FILE COMPLETE")
-            from common_modules import RST_text, send_message
+            from common_modules import RST_text, send_message, packet_queue
             send_message(RST_text, type = 'INFO', send_directly = True)
             timer.end()
             print(f"TIME COST: {timer.get_time()}")
             print(f"RECEIVE FILE SIZE: {written_total_length}")
             print(f"BANDWIDTH: {written_total_length / timer.get_time() * 8} bit/s")
+            
+            print(f"send_window_size: {send_window_size}")
             stop_event.set()
             ack_event_timer.stop()
             resend_data_event_timer.stop()
-            # write_to_file_event_timer.stop()
+            packet_queue.put("STOP")
+            
     
     # write_to_file_event_timer.reset()
     return

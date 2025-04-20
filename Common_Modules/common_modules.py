@@ -305,6 +305,9 @@ def gen_packet(dstv6, srcv6, proto, type = 'DATA'):
         exit(-1)
     # print(complete_packet.summary())
     complete_packet = Ether() / complete_packet
+    
+    # print(complete_packet.summary())
+    # print(complete_packet.show())
     return complete_packet
     
 def packet_assemble(dstv6, srcv6, mode, type = 'DATA'):
@@ -362,7 +365,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 Seq.seq_plus()
             else:
                 # print(f"SENDING {type} PACKET DIRECTLY")
-                sendp(complete_packet)
+                sendp(complete_packet, iface = source_iface, inter = inter_time, verbose = False)
                 if type == 'DATA':
                     Seq.seq_plus()
     elif dstv6_prefix != None and srcv6_prefix != None:
@@ -387,7 +390,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 Seq.seq_plus()
             else:
                 # print(f"SENDING {type} PACKET DIRECTLY")
-                sendp(complete_packet)
+                sendp(complete_packet, iface = source_iface, inter = inter_time, verbose = False)
                 if type == 'DATA':
                     Seq.seq_plus()
     else:

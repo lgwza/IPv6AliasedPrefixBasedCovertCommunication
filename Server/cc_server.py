@@ -10,6 +10,7 @@ import os
 from datetime import datetime, timedelta, timezone
 import random
 import time
+import psutil
 
 # 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -39,22 +40,21 @@ def packet_handler():
     # print("Source IPv6 address: ", packet[IPv6].src)
     # print("status: ", status)    
     while True:
-        if stop_event.is_set():
-            print("PACKET HANDLER STOPPED")
-            exit(0)
-            
-        print(f"PACKET QUEUE SIZE: {packet_queue.qsize()}")
-        packet = packet_queue.get() # 阻塞于此操作了
-        if packet is None:
-            print("WARNING: PACKET IS NONE")
-            continue
         
+            
+        # print(f"PACKET QUEUE SIZE: {packet_queue.qsize()}")
+
+        packet = packet_queue.get() # 阻塞于此操作了
+        # print(packet)
+        if packet == "STOP":
+            print("PACKET HANDLER STOPPED")
+            exit(0) 
         plain_text, packet_type, packet_seq_num, proto = handle_packet(packet)
         
-        print(f"plain_text: {plain_text}")
-        print(f"packet_type: {packet_type}")
-        print(f"packet_seq_num: {packet_seq_num}")
-        print(f"proto: {proto}")
+        # print(f"plain_text: {plain_text}")
+        # print(f"packet_type: {packet_type}")
+        # print(f"packet_seq_num: {packet_seq_num}")
+        # print(f"proto: {proto}")
         if plain_text == SYN_text and status == LISTEN:
             print("SYN_RECEIVED")
             status = SYN_RECEIVED
@@ -84,15 +84,15 @@ def packet_handler():
             ack_event_timer.start()
             write_to_file_event_timer.start()
         elif status == ESTABLISHED:
-            ack_event_timer.reset() # 收到包后计时重置
+            # ack_event_timer.reset() # 收到包后计时重置
             if packet_type == 'ACK' or packet_type == 'SACK':
                 # resend_data_event_timer.reset()
                 # 对端已接收，需要在发送窗口中标记对端已接收
                 send_window.flag_set(packet_seq_num, packet_type)
                 # resend_data(send_window, send_cache)
             elif packet_type == 'DATA':
-                print("RECEIVING DATA")
-                print(f"{receive_window.left} {receive_window.right}")
+                # print("RECEIVING DATA")
+                # print(f"{receive_window.left} {receive_window.right}")
                 if not receive_window.is_in_window(packet_seq_num):
                     # send_ack(receive_window)
                     # receive_window.send_ack()
@@ -100,9 +100,9 @@ def packet_handler():
                 else:
                     # 收到的包在接收窗口内
                     # 在接收窗口中标记已接收
-                    print("SEQ IS IN WINDOW")
+                    # print("SEQ IS IN WINDOW")
                     # TODO: 更新接收缓存，并且在合适的时候写入文件
-                    update_receive_cache(receive_cache, plain_text.decode(), \
+                    update_receive_cache(receive_cache, plain_text.decode(encoding = 'latin-1'), \
                         packet_seq_num, receive_cache_lock)
                     receive_window.flag_set(packet_seq_num, packet_type)
                     
@@ -116,7 +116,26 @@ def send_input():
         Input = input("Please input your message: ")
         send_message(Input)
 
+def monitor_resources():
+    pid = os.getpid()
+    process = psutil.Process(pid)
+    with open("overhead/resource_usage.txt", "a") as f:
+        f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    while True:
+        cpu_usage = process.cpu_percent(interval=1)
+        memory_info = process.memory_info()
+        
+        print(f"CPU Usage: {cpu_usage}%")
+        print(f"Memory Usage: {memory_info.rss / 1024 / 1024:.2f}MB")
+        
+        # 写入文件
+        with open("overhead/resource_usage.txt", "a") as f:
+            f.write(f"CPU Usage: {cpu_usage}%\n")
+            f.write(f"Memory Usage: {memory_info.rss / 1024 / 1024:.2f}MB\n")
+        # time.sleep(1)
 if __name__ == "__main__":
+    monitor_resources_thread = threading.Thread(target = monitor_resources)
+    monitor_resources_thread.start()
     status = LISTEN
     gen_next_mode_dict()
     

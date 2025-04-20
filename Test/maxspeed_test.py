@@ -20,7 +20,7 @@ hex_groups = [hex_representation[i:i+16] for i in range(0, len(hex_representatio
 icmpv6_packets = []
 # prefix = "2001:db8:2:"  # The fixed IPv6 prefix (first 64 bits)
 prefix = "2001:252:188:fe0"
-
+src_ip = "2402:f000:6:1e00::230"
 for i, group in enumerate(hex_groups):
     # Construct the full IPv6 destination address (prefix + the generated 64 bits)
     # We insert ':' every 4 characters to correctly format the IPv6 address
@@ -28,7 +28,7 @@ for i, group in enumerate(hex_groups):
     destination_ip = prefix + ':' + formatted_group
     # print(f"Destination IP {i+1}: {destination_ip}")
     # Create ICMPv6 Echo Request packet
-    icmpv6_packet = IPv6(dst=destination_ip) / ICMPv6EchoRequest()
+    icmpv6_packet = IPv6(dst=destination_ip, src = src_ip) / ICMPv6EchoRequest()
     icmpv6_packet = Ether() / icmpv6_packet
     # Append the packet to the list
     
@@ -41,7 +41,7 @@ for i, group in enumerate(hex_groups):
 start_time = time.time()
 
 # send(icmpv6_packets)
-sendp(icmpv6_packets)
+sendp(icmpv6_packets, iface = "eno2", verbose = False)
 
 end_time = time.time()
 print(f"Time taken to send all packets: {end_time - start_time:.2f} seconds")

@@ -25,6 +25,8 @@ class ResettableTimer:
     def _run_timer(self):
         """定时器运行的主循环，确保只创建一个线程来处理循环计时。"""
         while not self._stop_event.is_set():
+            if self.stop_event.is_set():
+                self.stop()
             self._reset_event.wait(self.interval)  # 等待间隔时间或重置事件
             if not self._reset_event.is_set():  # 如果重置事件没有触发，正常调用函数
                 self.function(*self.args, **self.kwargs)
@@ -47,7 +49,7 @@ class ResettableTimer:
         if self._is_running:
             self._reset_event.set()  # 设置重置事件
             self.start_time = time.time()  # 重置开始时间
-            # print("Timer reset.")
+            print("Timer reset.")
 
     def stop(self):
         """停止计时器。"""
