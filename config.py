@@ -41,13 +41,6 @@ filter_condition_dict = {
 send_file_mode = False
 receive_file_size = 25000
 
-with open("../router/veth1/delay_ms", "r") as f:
-    RTT = f.read().strip()
-with open("../router/veth1/loss", "r") as f:
-    packet_loss_rate = f.read().strip()
-with open("../router/veth1/rate", "r") as f:
-    max_rate = f.read().strip()
-
 RTT = MEASURED_RTT
 packet_loss_rate = MEASURED_PACKET_LOSS_RATE
 
