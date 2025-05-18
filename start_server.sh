@@ -1,0 +1,1 @@
+sudo python3 Server/cc_server.py
