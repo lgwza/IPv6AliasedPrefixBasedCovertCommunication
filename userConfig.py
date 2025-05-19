@@ -30,3 +30,9 @@ MONITOR_RESOURCES = None
 
 # String
 FILE_NAME = ""
+
+# Boolean
+SEND_FILE_MODE = None
+TEST_MODE = None
+
+RECEIVE_FILE_SIZE = None

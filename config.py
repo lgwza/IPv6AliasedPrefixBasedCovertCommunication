@@ -17,6 +17,10 @@ dst_daddr_spoofable = SOURCE_IPv6_ADDRESS_IS_MESSAGE_RECEIVABLE # 对端目的�
 is_monitor_resources = MONITOR_RESOURCES
 file_name = FILE_NAME
 
+send_file_mode = SEND_FILE_MODE
+is_test_mode = TEST_MODE
+receive_file_size = RECEIVE_FILE_SIZE
+
 def gen_next_mode_dict():
     global proto_list, next_mode
     for i in range(len(proto_list)):
@@ -42,9 +46,6 @@ filter_condition_dict = {
     'U': 'udp and ip6',
     'T': 'tcp and ip6[6] & 0x2 != 0'
 }
-
-send_file_mode = False
-receive_file_size = 25000
 
 RTT = MEASURED_RTT
 packet_loss_rate = MEASURED_PACKET_LOSS_RATE
