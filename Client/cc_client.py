@@ -129,7 +129,7 @@ def packet_handler():
             
 def send_input():
     if send_file_mode:
-        file_path = "random_text.txt"
+        file_path = file_name
         with open(file_path, "r") as f:
             file_message = f.read()
             # print(file_message)
@@ -168,8 +168,9 @@ def monitor_resources():
         # time.sleep(1)
         
 if __name__ == "__main__":
-    monitor_resources_thread = threading.Thread(target = monitor_resources)
-    monitor_resources_thread.start()
+    if monitor_resources:
+        monitor_resources_thread = threading.Thread(target = monitor_resources)
+        monitor_resources_thread.start()
     
     gen_next_mode_dict()
     

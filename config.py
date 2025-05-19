@@ -11,6 +11,8 @@ source_daddr_spoofable = DESTINATION_IPv6_ADDRESS_IS_MESSAGE_RECEIVABLE # 源端
 dst_saddr_spoofable = DESTINATION_IPv6_ADDRESS_IS_MESSAGE_SENDABLE # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
 dst_daddr_spoofable = SOURCE_IPv6_ADDRESS_IS_MESSAGE_RECEIVABLE # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
+monitor_resources = MONITOR_RESOURCES
+file_name = FILE_NAME
 
 def gen_next_mode_dict():
     global proto_list, next_mode
