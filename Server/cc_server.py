@@ -119,6 +119,9 @@ def send_input():
 def monitor_resources():
     pid = os.getpid()
     process = psutil.Process(pid)
+    from pathlib import Path
+    dir_path = Path("overhead")
+    dir_path.mkdir(parents=True, exist_ok=True)
     with open("overhead/resource_usage.txt", "a") as f:
         f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     while True:
@@ -134,8 +137,9 @@ def monitor_resources():
             f.write(f"Memory Usage: {memory_info.rss / 1024 / 1024:.2f}MB\n")
         # time.sleep(1)
 if __name__ == "__main__":
-    monitor_resources_thread = threading.Thread(target = monitor_resources)
-    monitor_resources_thread.start()
+    if is_monitor_resources:
+        monitor_resources_thread = threading.Thread(target = monitor_resources)
+        monitor_resources_thread.start()
     status = LISTEN
     gen_next_mode_dict()
     

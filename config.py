@@ -4,14 +4,17 @@ source_address = SOURCE_IPv6_ADDRESS
 source_mac = SOURCE_MAC
 sending_iface = SENDING_IFACE
 listening_iface = LISTENING_IFACE
+source_iface = sending_iface
 dst_address = DESTINATION_IPv6_ADDRESS
+mode = 'A'
+
 
 source_saddr_spoofable = SOURCE_IPv6_ADDRESS_IS_MESSAGE_SENDABLE # 源端源地址可搭载信息——源端可伪造源地址，对端需接收，源端可发送
 source_daddr_spoofable = DESTINATION_IPv6_ADDRESS_IS_MESSAGE_RECEIVABLE # 源端目的地址可搭载信息——对端拥有别名前缀，对端需接收，源端可发送
 dst_saddr_spoofable = DESTINATION_IPv6_ADDRESS_IS_MESSAGE_SENDABLE # 对端源地址可搭载信息——对端可伪造源地址，对端可发送，源端需接收
 dst_daddr_spoofable = SOURCE_IPv6_ADDRESS_IS_MESSAGE_RECEIVABLE # 对端目的地址可搭载信息——源端拥有别名前缀，对端可发送，源端需接收
 
-monitor_resources = MONITOR_RESOURCES
+is_monitor_resources = MONITOR_RESOURCES
 file_name = FILE_NAME
 
 def gen_next_mode_dict():
