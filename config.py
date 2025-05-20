@@ -4,7 +4,7 @@ source_address = SOURCE_IPv6_ADDRESS
 source_mac = SOURCE_MAC
 sending_iface = SENDING_IFACE
 listening_iface = LISTENING_IFACE
-source_iface = sending_iface
+source_iface = listening_iface
 dst_address = DESTINATION_IPv6_ADDRESS
 mode = 'A'
 
@@ -55,23 +55,44 @@ max_send_speed = 1500
 inter_time = 0
 real_inter_time = 1 / max_send_speed
 
-send_cache_size = 1500
-receive_cache_size = 5000
-send_window_max_size = 2500
-receive_window_max_size = 5000
-send_window_size = 1260
-receive_window_size = 5000
-ack_event_timer_interval = 0.5
-resend_data_event_timer_interval = 0.5
-write_to_file_event_timer_interval = 0.1
-sender_send_window_size = 5000
-sender_send_window_size = int(sender_send_window_size * (100 - packet_loss_rate) / 100)
+if IS_SENDER:
+    with open(file_name, "r") as f:
+        file_message = f.read()
+    send_file_size = len(file_message)
+    send_cache_size = send_file_size // 8 + 10
+    receive_cache_size = 1500
+    send_window_max_size = int(1e8)
+    receive_window_max_size = int(1e8)
+    # 会影响，太大导致seq_num_gen较慢，太小导致XXXXX TODO
+    send_window_size = min(3000, send_cache_size)
+    receive_window_size = 5000
+    ack_event_timer_interval = 0.0005
+    resend_data_event_timer_interval = 0.0005
+    write_to_file_event_timer_interval = 5
 
-# send_window_size = int(send_window_size / (packet_loss_rate * 100 + 1))
-receive_window_size = int(receive_window_size * (100 - packet_loss_rate) / 100)
-resend_data_event_timer_interval = max(RTT / 1000, send_window_size * inter_time)
-ack_event_timer_interval = max(RTT / 1000, receive_window_size * real_inter_time, \
-    sender_send_window_size * real_inter_time) / 2
+    send_window_size = int(send_window_size * (100 - packet_loss_rate) / 100)
+    receive_window_size = int(receive_window_size / (packet_loss_rate + 1))
+    resend_data_event_timer_interval = max(RTT / 1000, send_window_size * real_inter_time)
+    # resend_data_event_timer_interval = 1
+    ack_event_timer_interval = max(RTT / 1000, receive_window_size * real_inter_time)
+else:
+    send_cache_size = 1500
+    receive_cache_size = 5000
+    send_window_max_size = 2500
+    receive_window_max_size = 5000
+    send_window_size = 1260
+    receive_window_size = 5000
+    ack_event_timer_interval = 0.5
+    resend_data_event_timer_interval = 0.5
+    write_to_file_event_timer_interval = 0.1
+    sender_send_window_size = 5000
+    sender_send_window_size = int(sender_send_window_size * (100 - packet_loss_rate) / 100)
+
+    # send_window_size = int(send_window_size / (packet_loss_rate * 100 + 1))
+    receive_window_size = int(receive_window_size * (100 - packet_loss_rate) / 100)
+    resend_data_event_timer_interval = max(RTT / 1000, send_window_size * inter_time)
+    ack_event_timer_interval = max(RTT / 1000, receive_window_size * real_inter_time, \
+        sender_send_window_size * real_inter_time) / 2
 
 print(f"send_window_size: {send_window_size}")
 print(f"receive_window_size: {receive_window_size}")

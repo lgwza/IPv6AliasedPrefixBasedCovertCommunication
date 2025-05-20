@@ -36,3 +36,5 @@ SEND_FILE_MODE = None
 TEST_MODE = None
 
 RECEIVE_FILE_SIZE = None
+
+IS_SENDER = None
