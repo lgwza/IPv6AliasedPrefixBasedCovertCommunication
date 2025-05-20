@@ -365,7 +365,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 Seq.seq_plus()
             else:
                 # print(f"SENDING {type} PACKET DIRECTLY")
-                sendp(complete_packet, iface = source_iface, inter = inter_time, verbose = False)
+                sendp(complete_packet, iface = sending_iface, inter = inter_time, verbose = False)
                 if type == 'DATA':
                     Seq.seq_plus()
     elif dstv6_prefix != None and srcv6_prefix != None:
@@ -390,7 +390,7 @@ def send_packet(encrypted_blocks_hex, dstv6_prefix = None, \
                 Seq.seq_plus()
             else:
                 # print(f"SENDING {type} PACKET DIRECTLY")
-                sendp(complete_packet, iface = source_iface, inter = inter_time, verbose = False)
+                sendp(complete_packet, iface = sending_iface, inter = inter_time, verbose = False)
                 if type == 'DATA':
                     Seq.seq_plus()
     else:
