@@ -184,5 +184,5 @@ This code is released under the **MIT License**. See `LICENSE` file for details.
 
 ## Contact
 
-For academic inquiries, please contact the me via lgwza@qq.com
+For academic inquiries, please contact me via lgwza@qq.com
 
