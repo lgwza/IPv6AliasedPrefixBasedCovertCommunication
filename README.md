@@ -161,7 +161,7 @@ APCC/
 
 ## Citation
 
-If you use this code in your research, please cite:
+If you find this paper useful or use this code in your research, please cite:
 
 ```
 @inproceedings{wang2025apcc,
@@ -174,11 +174,15 @@ If you use this code in your research, please cite:
 }
 ```
 
+DOI: 10.1109/IWQoS65803.2025.11143455
+
+You can download this paper via this [link](https://ieeexplore.ieee.org/abstract/document/11143455).
+
 ## License
 
 This code is released under the **MIT License**. See `LICENSE` file for details.
 
 ## Contact
 
-For academic inquiries, please contact the authors via their institutional email (see paper).
+For academic inquiries, please contact the me via lgwza@qq.com
 
